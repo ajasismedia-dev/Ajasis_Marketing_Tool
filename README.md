@@ -32,10 +32,18 @@ Ajasis Media için özel olarak geliştirilen pazarlama ve lead yönetim uygulam
 - Karşınıza çıkan ekrandan ilk yönetici hesabını oluşturun.
 - Bu ekran yalnızca veritabanında hiç kullanıcı yoksa aktiftir. Kullanıcı oluşturulduktan sonra güvenlik sebebiyle `/setup` rotasına erişilemez.
 
+## Faz 2 - Firma & Lead Yönetimi
+- Gerçek veritabanı bağlantılı Dashboard
+- `companies` tablosu eklendi
+- Firma listeleme (Arama, Filtreleme, Sayfalama)
+- Firma Ekleme / Düzenleme (Mükerrer kayıt kontrolü)
+- Firma Detay ekranı ve durum (status) yönetimi
+
 ## Production Deployment Yöntemi
 
 1. Tüm proje dosyalarını FTP/SSH ile `domains/ajasismedia.com/public_html/marketingtool/` dizinine yükleyin.
 2. Production ortamındaki MariaDB'de veritabanını ve kullanıcıyı oluşturup `schema.sql` dosyasını import edin.
+   *(Eğer Faz 1'den kalma bir veritabanınız varsa, `schema.sql` içindeki `companies` tablosunu elle oluşturmanız gerekebilir)*
 3. `config/config.php` dosyasını açın:
    - `ENVIRONMENT` değerini `'production'` olarak değiştirin.
    - `BASE_PATH` değerini `'/marketingtool'` olarak ayarlayın.

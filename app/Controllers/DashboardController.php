@@ -11,11 +11,14 @@ class DashboardController extends Controller
     {
         Auth::requireLogin();
         
+        $companyModel = new \App\Models\Company();
+
         $data = [
-            'total_companies' => 0,
-            'new_leads' => 0,
-            'contacted' => 0,
-            'converted' => 0,
+            'total_companies' => $companyModel->countAll(),
+            'new_leads' => $companyModel->countByStatus('new'),
+            'contacted' => $companyModel->countByStatus('contacted') + $companyModel->countByStatus('replied') + $companyModel->countByStatus('proposal'),
+            'converted' => $companyModel->countByStatus('customer'),
+            'latest_companies' => $companyModel->getLatest(5),
             'page_title' => 'Dashboard'
         ];
 

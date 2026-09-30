@@ -8,3 +8,34 @@ CREATE TABLE `users` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `username` (`username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `companies` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `name` VARCHAR(180) NOT NULL,
+  `sector` VARCHAR(120) NULL,
+  `phone` VARCHAR(50) NULL,
+  `whatsapp` VARCHAR(50) NULL,
+  `email` VARCHAR(180) NULL,
+  `website` VARCHAR(255) NULL,
+  `instagram` VARCHAR(255) NULL,
+  `facebook` VARCHAR(255) NULL,
+  `linkedin` VARCHAR(255) NULL,
+  `address` TEXT NULL,
+  `district` VARCHAR(120) NULL,
+  `city` VARCHAR(120) DEFAULT 'Konya',
+  `source` VARCHAR(100) NULL,
+  `notes` TEXT NULL,
+  `status` ENUM('new', 'contacted', 'replied', 'proposal', 'customer', 'negative') NOT NULL DEFAULT 'new',
+  `first_contact_at` DATETIME NULL,
+  `last_contact_at` DATETIME NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  INDEX (`name`),
+  INDEX (`sector`),
+  INDEX (`status`),
+  INDEX (`city`),
+  INDEX (`district`),
+  INDEX (`phone`),
+  INDEX (`website`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
