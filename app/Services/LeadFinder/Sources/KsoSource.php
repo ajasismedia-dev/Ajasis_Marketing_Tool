@@ -110,13 +110,33 @@ class KsoSource implements LeadSourceInterface
         $emailNode = $xpath->query('//a[starts-with(@href, "mailto:")]')->item(0);
         if ($emailNode) $lead['email'] = trim(str_replace('mailto:', '', $emailNode->getAttribute('href')));
 
-        $webNode = $xpath->query('//a[starts-with(@href, "http")]')->item(0); // This could be risky if there are social links, but as a fallback it's okay for KSO which often links to the company directly under a specific class. Let's look for a class if possible, or just the first http link that isn't kso.org.tr
+        $blacklistDomains = [
+            'kso.org.tr', 'facebook.com', 'instagram.com', 'linkedin.com',
+            'youtube.com', 'twitter.com', 'x.com', 'wa.me', 'whatsapp.com'
+        ];
+        
+        $websiteCandidates = [];
         foreach ($xpath->query('//a[starts-with(@href, "http")]') as $node) {
             $href = $node->getAttribute('href');
-            if (strpos($href, 'kso.org.tr') === false) {
-                $lead['website'] = $href;
-                break;
+            $host = strtolower(parse_url($href, PHP_URL_HOST) ?? '');
+            
+            $isBlacklisted = false;
+            foreach ($blacklistDomains as $bDomain) {
+                if (strpos($host, $bDomain) !== false) {
+                    $isBlacklisted = true;
+                    break;
+                }
             }
+            if (!$isBlacklisted) {
+                $websiteCandidates[] = $href;
+            }
+        }
+        
+        if (count($websiteCandidates) === 1) {
+            $lead['website'] = $websiteCandidates[0];
+        } else if (count($websiteCandidates) > 1) {
+            // Check if one of them matches a 'web' or 'internet' label near it, or just leave it empty if ambiguous
+            // We'll leave it empty to avoid false positives as requested.
         }
         
         // Address is usually within an address tag or a specific paragraph

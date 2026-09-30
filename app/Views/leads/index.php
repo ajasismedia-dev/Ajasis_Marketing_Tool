@@ -165,7 +165,12 @@ $statusLabels = [
                             </button>
                         <?php endif; ?>
                         
-                        <button type="button" class="btn wa-btn" data-phone="<?= \App\Helpers\Security::escape($lead['phone']) ?>" data-name="<?= \App\Helpers\Security::escape($lead['name']) ?>" data-dbid="<?= $lead['db_id'] ?: '' ?>" <?= empty($lead['phone']) ? 'disabled' : '' ?> style="padding: 0.5rem; background: rgba(16, 185, 129, 0.15); color: #34d399;">
+                        <?php 
+                            $hasWA = !empty($lead['whatsapp']);
+                            $isMobile = !empty($lead['phone']) && strlen($lead['phone']) >= 10 && (strpos($lead['phone'], '05') === 0 || strpos($lead['phone'], '905') === 0 || strpos($lead['phone'], '+905') === 0 || strpos($lead['phone'], '5') === 0);
+                            $waDisabled = (!$hasWA && !$isMobile);
+                        ?>
+                        <button type="button" class="btn wa-btn" data-phone="<?= \App\Helpers\Security::escape($lead['phone']) ?>" data-whatsapp="<?= \App\Helpers\Security::escape($lead['whatsapp'] ?? '') ?>" data-name="<?= \App\Helpers\Security::escape($lead['name']) ?>" data-dbid="<?= $lead['db_id'] ?: '' ?>" <?= $waDisabled ? 'disabled' : '' ?> style="padding: 0.5rem; background: rgba(16, 185, 129, 0.15); color: #34d399;">
                             <i data-lucide="message-circle"></i> WhatsApp
                         </button>
                     </td>
@@ -224,7 +229,17 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.addEventListener('click', (e) => {
             const button = e.currentTarget;
             if (button.hasAttribute('disabled')) return;
-            const phone = button.getAttribute('data-phone');
+            const wa = button.getAttribute('data-whatsapp');
+            const ph = button.getAttribute('data-phone');
+            let phone = wa || ph;
+            
+            // Format for Turkey standard 90...
+            if (phone) {
+                phone = phone.replace(/\D/g, '');
+                if (phone.length === 10) phone = '90' + phone;
+                if (phone.length === 11 && phone.startsWith('0')) phone = '9' + phone.substring(1);
+            }
+            
             const name = button.getAttribute('data-name');
             const dbId = button.getAttribute('data-dbid');
             openWhatsApp(phone, name, dbId);
@@ -308,6 +323,24 @@ function enrichLead(btn, index, url) {
             addSocial('instagram', data.data.instagram);
             addSocial('facebook', data.data.facebook);
             addSocial('linkedin', data.data.linkedin);
+            
+            // Update WA button
+            const waBtn = btn.parentElement.querySelector('.wa-btn');
+            if (waBtn) {
+                const currentPhone = document.getElementById('form-phone-' + index).value || '';
+                const currentWa = document.getElementById('form-whatsapp-' + index).value || '';
+                waBtn.setAttribute('data-phone', currentPhone);
+                waBtn.setAttribute('data-whatsapp', currentWa);
+                
+                const hasWa = currentWa.length > 0;
+                const isMob = currentPhone.length >= 10 && (currentPhone.startsWith('05') || currentPhone.startsWith('905') || currentPhone.startsWith('+905') || currentPhone.startsWith('5'));
+                
+                if (hasWa || isMob) {
+                    waBtn.removeAttribute('disabled');
+                } else {
+                    waBtn.setAttribute('disabled', 'disabled');
+                }
+            }
             
             btn.style.display = 'none';
         } else {

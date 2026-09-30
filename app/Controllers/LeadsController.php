@@ -111,17 +111,20 @@ class LeadsController extends Controller
         }
 
         if (empty($data['name'])) {
-            die(json_encode(['success' => false, 'message' => 'Firma adı zorunludur.']));
+            echo "<script>alert('Firma adı zorunludur.'); history.back();</script>";
+            exit;
         }
 
         // Email validation
         if (!empty($data['email']) && !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
-            die(json_encode(['success' => false, 'message' => 'Geçerli bir e-posta adresi girin.']));
+            echo "<script>alert('Firma kaydedilemedi: geçersiz e-posta adresi.'); history.back();</script>";
+            exit;
         }
 
         // Normalizations
         $normalizer = new \App\Services\LeadFinder\Helpers\LeadNormalizer();
         $data['phone'] = $normalizer->normalizePhone($data['phone']);
+        $data['whatsapp'] = $normalizer->normalizePhone($data['whatsapp']);
         $data['website'] = $normalizer->formatUrl($data['website']);
         $data['instagram'] = $normalizer->normalizeSocialUrl($data['instagram']);
         $data['facebook'] = $normalizer->normalizeSocialUrl($data['facebook']);

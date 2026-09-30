@@ -61,4 +61,17 @@ TestHelper::assertTrue(validateEmailSave('test@example.com'), 'Valid email passe
 TestHelper::assertTrue(!validateEmailSave('invalid-email'), 'Invalid email blocked');
 TestHelper::assertTrue(validateEmailSave(''), 'Empty email passes');
 
+// 7. Whatsapp logic tests
+$emptyWa = LeadNormalizer::normalizePhone('');
+TestHelper::assertEqual('', $emptyWa, 'Empty whatsapp remains empty after normalizer');
+
+function isWaMobile($phone) {
+    if (empty($phone)) return false;
+    $p = LeadNormalizer::normalizePhone($phone);
+    if (strlen($p) >= 10 && (strpos($p, '905') === 0)) return true;
+    return false;
+}
+TestHelper::assertTrue(!isWaMobile('0332 123 45 67'), 'Fixed-line is NOT mobile');
+TestHelper::assertTrue(isWaMobile('0532 123 45 67'), '053x is mobile');
+
 TestHelper::finish();
