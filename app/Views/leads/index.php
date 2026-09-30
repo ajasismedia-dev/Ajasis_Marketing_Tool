@@ -140,15 +140,17 @@ $statusLabels = [
                                 <input type="hidden" name="csrf_token" value="<?= \App\Helpers\Security::generateCsrfToken() ?>">
                                 <input type="hidden" name="name" value="<?= \App\Helpers\Security::escape($lead['name']) ?>">
                                 <input type="hidden" name="sector" value="<?= \App\Helpers\Security::escape($lead['sector']) ?>">
-                                <input type="hidden" name="phone" id="form-phone-<?= $i ?>" value="<?= \App\Helpers\Security::escape($lead['phone']) ?>">
-                                <input type="hidden" name="website" id="form-website-<?= $i ?>" value="<?= \App\Helpers\Security::escape($lead['website']) ?>">
-                                <input type="hidden" name="instagram" id="form-instagram-<?= $i ?>" value="<?= \App\Helpers\Security::escape($lead['instagram']) ?>">
-                                <input type="hidden" name="facebook" id="form-facebook-<?= $i ?>" value="<?= \App\Helpers\Security::escape($lead['facebook']) ?>">
-                                <input type="hidden" name="linkedin" id="form-linkedin-<?= $i ?>" value="<?= \App\Helpers\Security::escape($lead['linkedin']) ?>">
-                                <input type="hidden" name="district" value="<?= \App\Helpers\Security::escape($lead['district']) ?>">
-                                <input type="hidden" name="city" value="<?= \App\Helpers\Security::escape($lead['city']) ?>">
-                                <input type="hidden" name="address" value="<?= \App\Helpers\Security::escape($lead['address']) ?>">
-                                <input type="hidden" name="source" value="<?= \App\Helpers\Security::escape($lead['source']) ?>">
+                                <input type="hidden" name="phone" id="form-phone-<?= $i ?>" value="<?= \App\Helpers\Security::escape($lead['phone'] ?? '') ?>">
+                                <input type="hidden" name="email" id="form-email-<?= $i ?>" value="<?= \App\Helpers\Security::escape($lead['email'] ?? '') ?>">
+                                <input type="hidden" name="whatsapp" id="form-whatsapp-<?= $i ?>" value="<?= \App\Helpers\Security::escape($lead['whatsapp'] ?? '') ?>">
+                                <input type="hidden" name="website" id="form-website-<?= $i ?>" value="<?= \App\Helpers\Security::escape($lead['website'] ?? '') ?>">
+                                <input type="hidden" name="instagram" id="form-instagram-<?= $i ?>" value="<?= \App\Helpers\Security::escape($lead['instagram'] ?? '') ?>">
+                                <input type="hidden" name="facebook" id="form-facebook-<?= $i ?>" value="<?= \App\Helpers\Security::escape($lead['facebook'] ?? '') ?>">
+                                <input type="hidden" name="linkedin" id="form-linkedin-<?= $i ?>" value="<?= \App\Helpers\Security::escape($lead['linkedin'] ?? '') ?>">
+                                <input type="hidden" name="district" value="<?= \App\Helpers\Security::escape($lead['district'] ?? '') ?>">
+                                <input type="hidden" name="city" value="<?= \App\Helpers\Security::escape($lead['city'] ?? '') ?>">
+                                <input type="hidden" name="address" value="<?= \App\Helpers\Security::escape($lead['address'] ?? '') ?>">
+                                <input type="hidden" name="source" value="<?= \App\Helpers\Security::escape($lead['source'] ?? '') ?>">
                                 <button type="submit" class="btn btn-primary" style="padding: 0.5rem;"><i data-lucide="plus"></i> Kaydet</button>
                             </form>
                         <?php endif; ?>
@@ -156,6 +158,10 @@ $statusLabels = [
                         <?php if ($lead['website']): ?>
                             <button type="button" class="btn enrich-btn" data-index="<?= $i ?>" data-url="<?= \App\Helpers\Security::escape($lead['website']) ?>" style="padding: 0.5rem; background: rgba(168, 85, 247, 0.15); color: #c084fc;">
                                 <i data-lucide="zap"></i> Zenginleştir
+                            </button>
+                        <?php elseif (strpos($lead['source_url'] ?? '', 'kso.org.tr') !== false): ?>
+                            <button type="button" class="btn enrich-btn" data-index="<?= $i ?>" data-url="<?= \App\Helpers\Security::escape($lead['source_url']) ?>" style="padding: 0.5rem; background: rgba(168, 85, 247, 0.15); color: #c084fc;">
+                                <i data-lucide="search"></i> KSO Detay
                             </button>
                         <?php endif; ?>
                         
@@ -257,6 +263,18 @@ function enrichLead(btn, index, url) {
                 if (!phoneSpan.textContent.trim()) {
                     phoneSpan.textContent = data.data.phone;
                     document.getElementById('form-phone-' + index).value = data.data.phone;
+                }
+            }
+            
+            if (data.data.email) {
+                const emailInput = document.getElementById('form-email-' + index);
+                if (!emailInput.value) emailInput.value = data.data.email;
+            }
+            if (data.data.website) {
+                const websiteInput = document.getElementById('form-website-' + index);
+                if (!websiteInput.value) {
+                    websiteInput.value = data.data.website;
+                    document.getElementById('lead-web-' + index).innerHTML = '<a href="'+data.data.website+'" target="_blank" style="color: var(--text-primary); text-decoration: underline;">'+data.data.website+'</a>';
                 }
             }
             

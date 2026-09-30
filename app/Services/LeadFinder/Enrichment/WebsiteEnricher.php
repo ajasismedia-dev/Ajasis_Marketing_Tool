@@ -11,26 +11,25 @@ class WebsiteEnricher
     {
         if (empty($url)) return null;
 
-        $baseUrl = self::getSafeRedirectUrl($url);
-        if (!$baseUrl) return null;
+        $safeRequest = self::getSafeRequestData($url);
+        if (!$safeRequest) return null;
 
-        $html = self::fetchHtml($baseUrl);
+        $html = self::fetchHtml($safeRequest);
         if (!$html) return null;
 
-        $data = self::extractData($html, $baseUrl);
+        $data = self::extractData($html, $safeRequest['url']);
         
-        // Find internal contact links
-        $internalLinks = self::extractInternalContactLinks($html, $baseUrl);
+        $internalLinks = self::extractInternalContactLinks($html, $safeRequest['url']);
         $pagesFetched = 1;
         
         foreach ($internalLinks as $link) {
             if ($pagesFetched >= 4) break;
-            $safeLink = self::getSafeRedirectUrl($link);
-            if (!$safeLink) continue;
+            $safeLinkRequest = self::getSafeRequestData($link);
+            if (!$safeLinkRequest) continue;
             
-            $subHtml = self::fetchHtml($safeLink);
+            $subHtml = self::fetchHtml($safeLinkRequest);
             if ($subHtml) {
-                $subData = self::extractData($subHtml, $safeLink);
+                $subData = self::extractData($subHtml, $safeLinkRequest['url']);
                 $data = self::mergeData($data, $subData);
                 $pagesFetched++;
             }
@@ -61,10 +60,17 @@ class WebsiteEnricher
         ];
     }
 
-    private static function getSafeRedirectUrl($url, $depth = 0)
+    private static function getSafeRequestData($url, $depth = 0)
     {
         if ($depth > self::$maxRedirects) return null;
-        if (!self::isSafeUrl($url)) return null;
+        
+        $parsed = parse_url($url);
+        if (empty($parsed['host']) || !in_array($parsed['scheme'] ?? '', ['http', 'https'])) return null;
+        $host = $parsed['host'];
+        $port = $parsed['port'] ?? ($parsed['scheme'] === 'https' ? 443 : 80);
+
+        $safeIp = self::resolveAndVerifySafeIp($host);
+        if (!$safeIp) return null;
 
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -75,57 +81,64 @@ class WebsiteEnricher
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
         curl_setopt($ch, CURLOPT_USERAGENT, 'AjasisMarketingTool/1.0');
+        curl_setopt($ch, CURLOPT_RESOLVE, ["{$host}:{$port}:{$safeIp}"]);
         
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $redirectUrl = curl_getinfo($ch, CURLINFO_REDIRECT_URL);
-        
+        curl_close($ch);
 
         if ($httpCode >= 300 && $httpCode < 400 && $redirectUrl) {
-            return self::getSafeRedirectUrl($redirectUrl, $depth + 1);
+            // Check if relative redirect
+            if (strpos($redirectUrl, '/') === 0) {
+                $redirectUrl = ($parsed['scheme'] ?? 'https') . '://' . $host . $redirectUrl;
+            }
+            return self::getSafeRequestData($redirectUrl, $depth + 1);
         }
 
-        return $url;
+        return ['url' => $url, 'ip' => $safeIp, 'host' => $host, 'port' => $port];
     }
 
-    private static function isSafeUrl($url)
+    private static function resolveAndVerifySafeIp($host)
     {
-        $parsed = parse_url($url);
-        if (empty($parsed['host'])) return false;
-        if (!in_array($parsed['scheme'] ?? '', ['http', 'https'])) return false;
+        $blacklistedHosts = ['localhost', '127.0.0.1', '0.0.0.0', '::1'];
+        if (in_array(strtolower($host), $blacklistedHosts)) return null;
 
-        $host = $parsed['host'];
+        // Note: DNS_A | DNS_AAAA is supported but dns_get_record with multiple constants can be tricky in older PHP.
+        // We will do DNS_A first, then DNS_AAAA if empty.
+        $records = dns_get_record($host, DNS_A);
+        if (empty($records)) {
+            $records = dns_get_record($host, DNS_AAAA);
+        }
         
-        // Prevent simple DNS rebinding attacks by resolving once here and checking
-        $records = dns_get_record($host, DNS_A | DNS_AAAA);
-        if (empty($records)) return false;
+        if (empty($records)) return null;
 
         foreach ($records as $record) {
             $ip = $record['ip'] ?? $record['ipv6'] ?? null;
             if (!$ip) continue;
-            if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-                return false;
+            
+            if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                return $ip; // Return the first verified public IP
             }
         }
         
-        $blacklistedHosts = ['localhost', '127.0.0.1', '0.0.0.0', '::1'];
-        if (in_array($host, $blacklistedHosts)) return false;
-
-        return true;
+        return null;
     }
 
-    private static function fetchHtml($url)
+    private static function fetchHtml($requestData)
     {
         $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_URL, $requestData['url']);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false); // Manually handled
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false); // Manually handled by getSafeRequestData
         curl_setopt($ch, CURLOPT_TIMEOUT, self::$timeout);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
         curl_setopt($ch, CURLOPT_USERAGENT, 'AjasisMarketingTool/1.0');
+        curl_setopt($ch, CURLOPT_RESOLVE, ["{$requestData['host']}:{$requestData['port']}:{$requestData['ip']}"]);
         
+        // Max size 1MB
         curl_setopt($ch, CURLOPT_NOPROGRESS, false);
         curl_setopt($ch, CURLOPT_PROGRESSFUNCTION, function($ch, $downloadSize, $downloaded, $uploadSize, $uploaded) {
             return ($downloaded > (1024 * 1024)) ? 1 : 0;
@@ -135,9 +148,13 @@ class WebsiteEnricher
         $error = curl_error($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+        curl_close($ch);
         
-        
-        if ($error || $httpCode >= 400 || stripos($contentType, 'text/html') === false) {
+        if ($error || $httpCode >= 400 || empty($contentType)) {
+            return null;
+        }
+
+        if (stripos($contentType, 'text/html') === false && stripos($contentType, 'application/xhtml+xml') === false) {
             return null;
         }
 
@@ -149,25 +166,36 @@ class WebsiteEnricher
         $links = [];
         $parsedBase = parse_url($baseUrl);
         $baseHost = $parsedBase['host'] ?? '';
+        $baseScheme = $parsedBase['scheme'] ?? 'https';
         
         if (preg_match_all('/href=["\']([^"\']+)["\']/i', $html, $matches)) {
             foreach ($matches[1] as $href) {
                 if (preg_match('/(iletisim|contact|about|hakkimizda)/i', $href)) {
-                    // Normalize URL
-                    if (strpos($href, 'http') === 0) {
-                        $parsed = parse_url($href);
-                        if (($parsed['host'] ?? '') === $baseHost) {
-                            $links[] = $href;
+                    $resolved = self::resolveRelativeUrl($baseUrl, $href);
+                    if ($resolved) {
+                        $parsedRes = parse_url($resolved);
+                        if (($parsedRes['host'] ?? '') === $baseHost) {
+                            $links[] = $resolved;
                         }
-                    } else if (strpos($href, '/') === 0) {
-                        $links[] = ($parsedBase['scheme'] ?? 'https') . '://' . $baseHost . $href;
-                    } else {
-                        $links[] = rtrim($baseUrl, '/') . '/' . $href;
                     }
                 }
             }
         }
         return array_unique($links);
+    }
+    
+    private static function resolveRelativeUrl($base, $rel)
+    {
+        if (parse_url($rel, PHP_URL_SCHEME) != '') return $rel;
+        if ($rel[0] == '#' || $rel[0] == '?') return $base . $rel;
+        extract(parse_url($base));
+        $path = preg_replace('#/[^/]*$#', '', $path ?? '');
+        if ($rel[0] == '/') $path = '';
+        $abs = "$host$path/$rel";
+        $re = ['#(/\.?/)#', '#/(?!\.\.)[^/]+/\.\./#'];
+        for ($n = 1; $n > 0; $abs = preg_replace($re, '/', $abs, -1, $n)) {}
+        $abs = str_replace("../", "", $abs);
+        return $scheme . '://' . $abs;
     }
 
     private static function extractJsonLd($html, $key)
@@ -176,11 +204,46 @@ class WebsiteEnricher
             foreach ($matches[1] as $json) {
                 $data = json_decode($json, true);
                 if (is_array($data)) {
-                    if (isset($data['@type']) && in_array($data['@type'], ['Organization', 'LocalBusiness'])) {
-                        if (!empty($data[$key])) {
-                            return is_array($data[$key]) ? $data[$key][0] : $data[$key];
+                    if (isset($data['@graph'])) {
+                        foreach ($data['@graph'] as $item) {
+                            $res = self::parseJsonLdItem($item, $key);
+                            if ($res) return $res;
+                        }
+                    } else if (isset($data[0])) {
+                        foreach ($data as $item) {
+                            $res = self::parseJsonLdItem($item, $key);
+                            if ($res) return $res;
+                        }
+                    } else {
+                        $res = self::parseJsonLdItem($data, $key);
+                        if ($res) return $res;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+    
+    private static function parseJsonLdItem($item, $key)
+    {
+        if (is_array($item) && isset($item['@type'])) {
+            $types = is_array($item['@type']) ? $item['@type'] : [$item['@type']];
+            $validTypes = ['Organization', 'LocalBusiness', 'Store', 'Restaurant'];
+            if (count(array_intersect($types, $validTypes)) > 0) {
+                // If they requested social link via sameAs
+                if (strpos($key, 'social:') === 0) {
+                    $domain = str_replace('social:', '', $key);
+                    if (!empty($item['sameAs'])) {
+                        $sameAs = is_array($item['sameAs']) ? $item['sameAs'] : [$item['sameAs']];
+                        foreach ($sameAs as $link) {
+                            if (stripos($link, $domain) !== false) return $link;
                         }
                     }
+                    return null;
+                }
+                
+                if (!empty($item[$key])) {
+                    return is_array($item[$key]) ? $item[$key][0] : $item[$key];
                 }
             }
         }
@@ -206,6 +269,10 @@ class WebsiteEnricher
 
     private static function extractSocial($html, $domain)
     {
+        // Try json-ld first
+        $jsonLdRes = self::extractJsonLd($html, 'social:' . $domain);
+        if ($jsonLdRes) return $jsonLdRes;
+        
         if (preg_match('/href=["\'](https?:\/\/(?:www\.)?' . preg_quote($domain) . '\/[^"\']+)["\']/i', $html, $matches)) {
             return $matches[1];
         }

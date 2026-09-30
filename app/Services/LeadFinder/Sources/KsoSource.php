@@ -71,4 +71,54 @@ class KsoSource implements LeadSourceInterface
 
         return $results;
     }
+    
+    public function enrichResult(array $lead)
+    {
+        if (empty($lead['source_url'])) return $lead;
+        
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $lead['source_url']);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'AjasisMarketingTool/1.0');
+        $html = curl_exec($ch);
+        $error = curl_error($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+        if ($error || $httpCode >= 400 || !$html) {
+            return $lead; // Fail gracefully
+        }
+
+        libxml_use_internal_errors(true);
+        $dom = new \DOMDocument();
+        $dom->loadHTML($html);
+        libxml_clear_errors();
+        $xpath = new \DOMXPath($dom);
+
+        // KSO Detail extraction heuristics
+        $phoneNode = $xpath->query('//a[starts-with(@href, "tel:")]')->item(0);
+        if ($phoneNode) $lead['phone'] = trim(str_replace('tel:', '', $phoneNode->getAttribute('href')));
+        
+        $emailNode = $xpath->query('//a[starts-with(@href, "mailto:")]')->item(0);
+        if ($emailNode) $lead['email'] = trim(str_replace('mailto:', '', $emailNode->getAttribute('href')));
+
+        $webNode = $xpath->query('//a[starts-with(@href, "http")]')->item(0); // This could be risky if there are social links, but as a fallback it's okay for KSO which often links to the company directly under a specific class. Let's look for a class if possible, or just the first http link that isn't kso.org.tr
+        foreach ($xpath->query('//a[starts-with(@href, "http")]') as $node) {
+            $href = $node->getAttribute('href');
+            if (strpos($href, 'kso.org.tr') === false) {
+                $lead['website'] = $href;
+                break;
+            }
+        }
+        
+        // Address is usually within an address tag or a specific paragraph
+        $addressNode = $xpath->query('//address | //p[contains(@class, "address")]')->item(0);
+        if ($addressNode) {
+            $lead['address'] = trim($addressNode->textContent);
+        }
+
+        return $lead;
+    }
 }

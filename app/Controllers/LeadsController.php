@@ -63,41 +63,72 @@ class LeadsController extends Controller
     public function enrich()
     {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') return $this->error404();
-        Security::checkCsrfToken($_POST['csrf_token'] ?? '');
+        \App\Helpers\Security::checkCsrfToken($_POST['csrf_token'] ?? '');
 
-        $url = $_POST['url'] ?? '';
+        $url = trim($_POST['url'] ?? '');
         if (empty($url)) {
             die(json_encode(['success' => false, 'message' => 'URL eksik']));
         }
 
-        $data = WebsiteEnricher::enrich($url);
+        $data = [];
+        if (strpos($url, 'kso.org.tr') !== false) {
+            $kso = new \App\Services\LeadFinder\Sources\KsoSource();
+            $lead = ['source_url' => $url];
+            $enriched = $kso->enrichResult($lead);
+            $data = $enriched;
+            unset($data['source_url']); // remove internal key
+        } else {
+            $data = \App\Services\LeadFinder\Enrichment\WebsiteEnricher::enrich($url);
+        }
 
         if ($data) {
+            $normalizer = new \App\Services\LeadFinder\Helpers\LeadNormalizer();
+            $data['phone'] = $normalizer->normalizePhone($data['phone'] ?? '');
             echo json_encode(['success' => true, 'data' => $data]);
         } else {
             echo json_encode(['success' => false, 'message' => 'Yeni bilgi bulunamadı veya erişim engellendi.']);
         }
+        exit;
     }
 
     public function save()
     {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') return $this->error404();
-        Security::checkCsrfToken($_POST['csrf_token'] ?? '');
+        \App\Helpers\Security::checkCsrfToken($_POST['csrf_token'] ?? '');
 
         // Whitelist fields
         $fields = [
-            'name', 'sector', 'phone', 'website', 'instagram', 
+            'name', 'sector', 'phone', 'whatsapp', 'email', 'website', 'instagram', 
             'facebook', 'linkedin', 'address', 'district', 'city', 'source'
         ];
         
         $data = [];
         foreach ($fields as $field) {
-            $data[$field] = $_POST[$field] ?? '';
+            $data[$field] = trim($_POST[$field] ?? '');
         }
 
         if (empty($data['name'])) {
-            // Handle error, though name is required in form
             die(json_encode(['success' => false, 'message' => 'Firma adı zorunludur.']));
+        }
+
+        // Email validation
+        if (!empty($data['email']) && !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
+            $data['email'] = '';
+        }
+
+        // Normalizations
+        $normalizer = new \App\Services\LeadFinder\Helpers\LeadNormalizer();
+        $data['phone'] = $normalizer->normalizePhone($data['phone']);
+        $data['website'] = $normalizer->formatUrl($data['website']);
+        $data['instagram'] = $normalizer->normalizeSocialUrl($data['instagram']);
+        $data['facebook'] = $normalizer->normalizeSocialUrl($data['facebook']);
+        $data['linkedin'] = $normalizer->normalizeSocialUrl($data['linkedin']);
+
+        // Auto-assign whatsapp if phone is mobile and whatsapp is empty
+        if (empty($data['whatsapp']) && !empty($data['phone'])) {
+            if (strlen($data['phone']) === 12 && strpos($data['phone'], '905') === 0) {
+                $data['whatsapp'] = $data['phone'];
+            }
         }
 
         $companyModel = new \App\Models\Company();
@@ -105,7 +136,6 @@ class LeadsController extends Controller
         // Duplicate check
         $duplicate = $companyModel->findPotentialDuplicate($data['name'], $data['phone'], $data['website']);
         if ($duplicate) {
-            // Redirect to existing
             header("Location: " . BASE_PATH . "/companies/show/" . $duplicate['id'] . "?msg=duplicate");
             exit;
         }

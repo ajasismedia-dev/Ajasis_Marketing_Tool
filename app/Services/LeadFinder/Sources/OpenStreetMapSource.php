@@ -20,11 +20,18 @@ class OpenStreetMapSource implements LeadSourceInterface
         'eczane' => 'amenity=pharmacy'
     ];
 
+    private function sanitizeInput($input)
+    {
+        // Only allow word characters, spaces, and turkish chars. Remove anything else.
+        $clean = preg_replace('/[^\p{L}\p{N}\s-]/u', '', $input);
+        return trim($clean);
+    }
+
     public function search($query, $city, $district, $limit)
     {
         $results = [];
-        $searchQuery = mb_strtolower(trim($query), 'UTF-8');
-        $safeCity = addslashes($city ?: 'Konya');
+        $searchQuery = mb_strtolower($this->sanitizeInput($query), 'UTF-8');
+        $safeCity = $this->sanitizeInput($city ?: 'Konya');
         
         $tagFilter = '["name"~"' . preg_quote($searchQuery) . '",i]';
         
@@ -38,7 +45,7 @@ class OpenStreetMapSource implements LeadSourceInterface
 
         $areaQuery = "area[\"name\"=\"{$safeCity}\"]->.searchArea;";
         if (!empty($district)) {
-            $safeDistrict = addslashes($district);
+            $safeDistrict = $this->sanitizeInput($district);
             $areaQuery = "area[\"name\"=\"{$safeCity}\"]->.city; area[\"name\"=\"{$safeDistrict}\"](area.city)->.searchArea;";
         }
         
