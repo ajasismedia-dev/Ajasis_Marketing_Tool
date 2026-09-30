@@ -54,6 +54,22 @@ $statusLabels = [
 </div>
 
 <?php if (!empty($filters['q'])): ?>
+<?php if (!empty($statuses)): ?>
+<div class="glass-panel" style="padding: 1rem; margin-bottom: 1rem; display: flex; gap: 1rem; flex-wrap: wrap;">
+    <div style="font-weight: 600; color: var(--text-secondary); display: flex; align-items: center; margin-right: 1rem;">Kaynak Durumu:</div>
+    <?php foreach ($statuses as $source => $stat): ?>
+        <?php 
+            $color = $stat['status'] === 'success' ? '#34d399' : ($stat['status'] === 'timeout' ? '#fbbf24' : '#f87171'); 
+            $bg = $stat['status'] === 'success' ? 'rgba(16, 185, 129, 0.15)' : ($stat['status'] === 'timeout' ? 'rgba(251, 191, 36, 0.15)' : 'rgba(248, 113, 113, 0.15)');
+        ?>
+        <div style="background: <?= $bg ?>; color: <?= $color ?>; padding: 0.25rem 0.75rem; border-radius: var(--radius-full); font-size: 0.875rem; display: flex; align-items: center; gap: 0.5rem;">
+            <strong><?= $source ?></strong>: 
+            <?= $stat['status'] === 'success' ? $stat['count'] . ' kayıt (' . $stat['duration'] . ')' : $stat['status'] ?>
+        </div>
+    <?php endforeach; ?>
+</div>
+<?php endif; ?>
+
 <div class="glass-panel" style="overflow-x: auto;">
     <table style="width: 100%; text-align: left; border-collapse: collapse;">
         <thead>
@@ -120,7 +136,7 @@ $statusLabels = [
                         <?php if ($lead['db_id']): ?>
                             <a href="<?= BASE_PATH ?>/companies/show/<?= $lead['db_id'] ?>" class="btn" style="padding: 0.5rem; background: rgba(255,255,255,0.1);"><i data-lucide="eye"></i> Detay</a>
                         <?php else: ?>
-                            <form action="<?= BASE_PATH ?>/companies/create" method="POST" target="_blank" style="margin: 0;">
+                            <form action="<?= BASE_PATH ?>/leads/save" method="POST" style="margin: 0;">
                                 <input type="hidden" name="csrf_token" value="<?= \App\Helpers\Security::generateCsrfToken() ?>">
                                 <input type="hidden" name="name" value="<?= \App\Helpers\Security::escape($lead['name']) ?>">
                                 <input type="hidden" name="sector" value="<?= \App\Helpers\Security::escape($lead['sector']) ?>">
@@ -138,12 +154,12 @@ $statusLabels = [
                         <?php endif; ?>
                         
                         <?php if ($lead['website']): ?>
-                            <button type="button" class="btn" style="padding: 0.5rem; background: rgba(168, 85, 247, 0.15); color: #c084fc;" onclick="enrichLead(<?= $i ?>, '<?= \App\Helpers\Security::escape($lead['website']) ?>')">
+                            <button type="button" class="btn enrich-btn" data-index="<?= $i ?>" data-url="<?= \App\Helpers\Security::escape($lead['website']) ?>" style="padding: 0.5rem; background: rgba(168, 85, 247, 0.15); color: #c084fc;">
                                 <i data-lucide="zap"></i> Zenginleştir
                             </button>
                         <?php endif; ?>
                         
-                        <button type="button" class="btn" style="padding: 0.5rem; background: rgba(16, 185, 129, 0.15); color: #34d399;" onclick="openWhatsApp('<?= \App\Helpers\Security::escape($lead['phone']) ?>', '<?= \App\Helpers\Security::escape(addslashes($lead['name'])) ?>', <?= $lead['db_id'] ?: 'null' ?>)">
+                        <button type="button" class="btn wa-btn" data-phone="<?= \App\Helpers\Security::escape($lead['phone']) ?>" data-name="<?= \App\Helpers\Security::escape($lead['name']) ?>" data-dbid="<?= $lead['db_id'] ?: '' ?>" <?= empty($lead['phone']) ? 'disabled' : '' ?> style="padding: 0.5rem; background: rgba(16, 185, 129, 0.15); color: #34d399;">
                             <i data-lucide="message-circle"></i> WhatsApp
                         </button>
                     </td>
@@ -171,8 +187,8 @@ $statusLabels = [
         </div>
         
         <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
-            <button type="button" class="btn" style="background: rgba(255,255,255,0.1); color: #fff;" onclick="document.getElementById('waModal').style.display='none'">İptal</button>
-            <button type="button" class="btn btn-primary" onclick="sendWhatsApp()">WhatsApp'ta Aç</button>
+            <button type="button" id="waModalClose" class="btn" style="background: rgba(255,255,255,0.1); color: #fff;">İptal</button>
+            <button type="button" id="waModalSend" class="btn btn-primary">WhatsApp'ta Aç</button>
         </div>
         
         <div id="waMarkContactedBox" style="display: none; margin-top: 1rem; border-top: 1px solid var(--card-border); padding-top: 1rem;">
@@ -188,8 +204,37 @@ $statusLabels = [
 </div>
 
 <script>
-function enrichLead(index, url) {
-    const btn = event.currentTarget;
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.enrich-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const button = e.currentTarget;
+            const index = button.getAttribute('data-index');
+            const url = button.getAttribute('data-url');
+            enrichLead(button, index, url);
+        });
+    });
+
+    document.querySelectorAll('.wa-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const button = e.currentTarget;
+            if (button.hasAttribute('disabled')) return;
+            const phone = button.getAttribute('data-phone');
+            const name = button.getAttribute('data-name');
+            const dbId = button.getAttribute('data-dbid');
+            openWhatsApp(phone, name, dbId);
+        });
+    });
+    
+    document.getElementById('waModalClose').addEventListener('click', () => {
+        document.getElementById('waModal').style.display='none';
+    });
+    
+    document.getElementById('waModalSend').addEventListener('click', () => {
+        sendWhatsApp();
+    });
+});
+
+function enrichLead(btn, index, url) {
     const originalHtml = btn.innerHTML;
     btn.innerHTML = '<i data-lucide="loader" class="spin"></i> Bekleyin...';
     btn.disabled = true;
@@ -206,20 +251,35 @@ function enrichLead(index, url) {
     .then(data => {
         if (data.success) {
             alert('Yeni bilgiler bulundu ve listeye eklendi!');
-            if (data.data.phone && !document.getElementById('lead-phone-' + index).innerText.trim()) {
-                document.getElementById('lead-phone-' + index).innerText = data.data.phone;
-                document.getElementById('form-phone-' + index).value = data.data.phone;
+            
+            if (data.data.phone) {
+                const phoneSpan = document.getElementById('lead-phone-' + index);
+                if (!phoneSpan.textContent.trim()) {
+                    phoneSpan.textContent = data.data.phone;
+                    document.getElementById('form-phone-' + index).value = data.data.phone;
+                }
             }
-            if (data.data.instagram && !document.getElementById('form-instagram-' + index).value) {
-                document.getElementById('form-instagram-' + index).value = data.data.instagram;
-                document.getElementById('lead-web-' + index).innerHTML += '<a href="'+data.data.instagram+'" target="_blank" style="color: var(--text-secondary); display: block;">Instagram</a>';
-            }
-            if (data.data.facebook && !document.getElementById('form-facebook-' + index).value) {
-                document.getElementById('form-facebook-' + index).value = data.data.facebook;
-            }
-            if (data.data.linkedin && !document.getElementById('form-linkedin-' + index).value) {
-                document.getElementById('form-linkedin-' + index).value = data.data.linkedin;
-            }
+            
+            const addSocial = (type, val) => {
+                if (val) {
+                    const input = document.getElementById('form-' + type + '-' + index);
+                    if (!input.value) {
+                        input.value = val;
+                        const a = document.createElement('a');
+                        a.href = val;
+                        a.target = '_blank';
+                        a.style.color = 'var(--text-secondary)';
+                        a.style.display = 'block';
+                        a.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+                        document.getElementById('lead-web-' + index).appendChild(a);
+                    }
+                }
+            };
+            
+            addSocial('instagram', data.data.instagram);
+            addSocial('facebook', data.data.facebook);
+            addSocial('linkedin', data.data.linkedin);
+            
             btn.style.display = 'none';
         } else {
             alert(data.message || 'Yeni bilgi bulunamadı.');

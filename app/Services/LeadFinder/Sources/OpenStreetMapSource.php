@@ -6,21 +6,47 @@ use App\Services\LeadFinder\LeadSourceInterface;
 
 class OpenStreetMapSource implements LeadSourceInterface
 {
+    private $sectorMapping = [
+        'mimarlık' => 'office=architect',
+        'mimar' => 'office=architect',
+        'emlak' => 'office=estate_agent',
+        'mobilya' => 'shop=furniture',
+        'restoran' => 'amenity=restaurant',
+        'kafe' => 'amenity=cafe',
+        'kuaför' => 'shop=hairdresser',
+        'otomotiv' => 'shop=car',
+        'oto tamir' => 'shop=car_repair',
+        'market' => 'shop=supermarket',
+        'eczane' => 'amenity=pharmacy'
+    ];
+
     public function search($query, $city, $district, $limit)
     {
         $results = [];
+        $searchQuery = mb_strtolower(trim($query), 'UTF-8');
+        $safeCity = addslashes($city ?: 'Konya');
         
-        // Simple Overpass query to find nodes/ways matching the name/type in the area
-        // Note: Using a general search for the word in name tag within Konya
+        $tagFilter = '["name"~"' . preg_quote($searchQuery) . '",i]';
         
-        $searchQuery = mb_strtolower($query, 'UTF-8');
+        foreach ($this->sectorMapping as $keyword => $tag) {
+            if (strpos($searchQuery, $keyword) !== false) {
+                list($k, $v) = explode('=', $tag);
+                $tagFilter = '["' . $k . '"="' . $v . '"]';
+                break;
+            }
+        }
+
+        $areaQuery = "area[\"name\"=\"{$safeCity}\"]->.searchArea;";
+        if (!empty($district)) {
+            $safeDistrict = addslashes($district);
+            $areaQuery = "area[\"name\"=\"{$safeCity}\"]->.city; area[\"name\"=\"{$safeDistrict}\"](area.city)->.searchArea;";
+        }
         
-        // Building Overpass QL
         $overpassQuery = "[out:json][timeout:10];
-        area[name=\"{$city}\"]->.searchArea;
+        {$areaQuery}
         (
-          node[\"name\"~\"{$searchQuery}\",i](area.searchArea);
-          way[\"name\"~\"{$searchQuery}\",i](area.searchArea);
+          node{$tagFilter}(area.searchArea);
+          way{$tagFilter}(area.searchArea);
         );
         out center {$limit};";
 
@@ -32,11 +58,15 @@ class OpenStreetMapSource implements LeadSourceInterface
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, "data=" . urlencode($overpassQuery));
         curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
         curl_setopt($ch, CURLOPT_USERAGENT, 'AjasisMarketingTool/1.0');
         $response = curl_exec($ch);
+        $error = curl_error($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         
 
-        if (!$response) return [];
+        if ($error || $httpCode >= 400 || !$response) return [];
 
         $data = json_decode($response, true);
         if (empty($data['elements'])) return [];

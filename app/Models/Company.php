@@ -125,29 +125,46 @@ class Company
 
     public function findPotentialDuplicate($name, $phone, $website)
     {
-        $name = trim(strtolower($name));
-        $phone = preg_replace('/[^0-9]/', '', $phone ?? '');
+        $normName = \App\Services\LeadFinder\Helpers\LeadNormalizer::normalizeCompanyName($name);
+        $normPhone = \App\Services\LeadFinder\Helpers\LeadNormalizer::normalizePhone($phone);
+        $normDomain = \App\Services\LeadFinder\Helpers\LeadNormalizer::normalizeDomain($website);
+
+        $sql = "SELECT id, name, phone, website, status FROM companies WHERE 1=0";
+        $params = [];
         
-        $website = $website ?? '';
-        if ($website) {
-            $parsed = parse_url($website);
-            $website = $parsed['host'] ?? $website;
-            $website = preg_replace('/^www\./', '', $website);
+        if ($normPhone) {
+            $last10 = substr($normPhone, -10);
+            $sql .= " OR phone LIKE :phone";
+            $params['phone'] = "%{$last10}%";
+        }
+        if ($normDomain) {
+            $sql .= " OR website LIKE :website";
+            $params['website'] = "%{$normDomain}%";
+        }
+        if ($normName) {
+            $sql .= " OR name LIKE :name";
+            $params['name'] = "%{$name}%";
         }
 
-        $sql = "SELECT id, name FROM companies 
-                WHERE LOWER(TRIM(name)) = :name 
-                OR (phone != '' AND REPLACE(REPLACE(REPLACE(phone, ' ', ''), '+', ''), '-', '') = :phone) 
-                OR (website != '' AND website LIKE :website) 
-                LIMIT 1";
+        if (empty($params)) return false;
 
         $stmt = $this->db->prepare($sql);
-        $stmt->execute([
-            'name' => $name,
-            'phone' => $phone,
-            'website' => $website ? '%' . $website . '%' : 'impossible_match'
-        ]);
-        return $stmt->fetch();
+        $stmt->execute($params);
+        $results = $stmt->fetchAll();
+
+        foreach ($results as $row) {
+            if ($normPhone && \App\Services\LeadFinder\Helpers\LeadNormalizer::normalizePhone($row['phone']) === $normPhone) {
+                return $row;
+            }
+            if ($normDomain && \App\Services\LeadFinder\Helpers\LeadNormalizer::normalizeDomain($row['website']) === $normDomain) {
+                return $row;
+            }
+            if ($normName && \App\Services\LeadFinder\Helpers\LeadNormalizer::normalizeCompanyName($row['name']) === $normName) {
+                return $row;
+            }
+        }
+        
+        return false;
     }
 
     public function getLatest($limit = 5)

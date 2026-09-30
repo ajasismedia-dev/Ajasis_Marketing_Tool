@@ -11,44 +11,61 @@ use App\Models\Company;
 class LeadFinderService
 {
     private $sources = [];
+    private $sourceStatuses = [];
 
     public function __construct($sourceKey = 'all')
     {
         if ($sourceKey === 'all' || $sourceKey === 'kso') {
-            $this->sources[] = new KsoSource();
+            $this->sources['KSO'] = new KsoSource();
         }
         if ($sourceKey === 'all' || $sourceKey === 'listofcompany') {
-            $this->sources[] = new ListOfCompanySource();
+            $this->sources['ListOfCompany'] = new ListOfCompanySource();
         }
         if ($sourceKey === 'all' || $sourceKey === 'osm') {
-            $this->sources[] = new OpenStreetMapSource();
+            $this->sources['OSM'] = new OpenStreetMapSource();
         }
     }
 
     public function search($query, $city = 'Konya', $district = '', $limit = 25)
     {
         $allResults = [];
-        $perSourceLimit = ceil($limit / max(1, count($this->sources)));
+        $this->sourceStatuses = [];
 
-        foreach ($this->sources as $source) {
+        foreach ($this->sources as $name => $source) {
+            $startTime = microtime(true);
             try {
-                $results = $source->search($query, $city, $district, $perSourceLimit);
-                if (is_array($results)) {
+                $results = $source->search($query, $city, $district, $limit);
+                $duration = round(microtime(true) - $startTime, 2);
+                
+                if (is_array($results) && count($results) > 0) {
                     $allResults = array_merge($allResults, $results);
+                    $this->sourceStatuses[$name] = [
+                        'status' => 'success',
+                        'count' => count($results),
+                        'duration' => $duration . 's'
+                    ];
+                } else {
+                    $this->sourceStatuses[$name] = [
+                        'status' => (microtime(true) - $startTime >= 4.5) ? 'timeout' : 'empty/unavailable',
+                        'count' => 0,
+                        'duration' => $duration . 's'
+                    ];
                 }
+                $this->logRequest($name, $query, $this->sourceStatuses[$name]['status'], $duration);
             } catch (\Exception $e) {
-                // Log and continue
-                error_log("LeadFinderService Error: " . $e->getMessage());
+                $duration = round(microtime(true) - $startTime, 2);
+                $this->sourceStatuses[$name] = [
+                    'status' => 'error',
+                    'count' => 0,
+                    'duration' => $duration . 's'
+                ];
+                $this->logRequest($name, $query, 'error: ' . $e->getMessage(), $duration);
             }
         }
 
-        // Deduplicate and merge results
         $mergedResults = LeadNormalizer::deduplicate($allResults);
-
-        // Limit final results
         $mergedResults = array_slice($mergedResults, 0, $limit);
 
-        // Check against DB
         try {
             $companyModel = new Company();
             foreach ($mergedResults as &$lead) {
@@ -56,7 +73,7 @@ class LeadFinderService
                 if ($dbMatch) {
                     $lead['db_id'] = $dbMatch['id'];
                     $fullDb = $companyModel->findById($dbMatch['id']);
-                    $lead['db_status'] = $fullDb['status'];
+                    $lead['db_status'] = $fullDb['status'] ?? 'new';
                 } else {
                     $lead['db_id'] = null;
                 }
@@ -65,8 +82,23 @@ class LeadFinderService
             foreach ($mergedResults as &$lead) {
                 $lead['db_id'] = null;
             }
+            error_log("DB check failed: " . $e->getMessage());
         }
 
-        return $mergedResults;
+        return [
+            'leads' => $mergedResults,
+            'statuses' => $this->sourceStatuses
+        ];
+    }
+    
+    private function logRequest($source, $query, $status, $duration)
+    {
+        $logFile = __DIR__ . '/../../../../storage/logs/leadfinder.log';
+        if (!file_exists(dirname($logFile))) {
+            @mkdir(dirname($logFile), 0777, true);
+        }
+        $timestamp = date('Y-m-d H:i:s');
+        $msg = "[$timestamp] SOURCE: $source | QUERY: $query | STATUS: $status | TIME: {$duration}s\n";
+        @file_put_contents($logFile, $msg, FILE_APPEND);
     }
 }

@@ -17,22 +17,39 @@ class LeadsController extends Controller
 
     public function index()
     {
-        $query = $_GET['q'] ?? '';
-        $city = $_GET['city'] ?? 'Konya';
-        $district = $_GET['district'] ?? '';
+        $query = trim($_GET['q'] ?? '');
+        $city = trim($_GET['city'] ?? 'Konya');
+        $district = trim($_GET['district'] ?? '');
         $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 25;
         $sourceKey = $_GET['source'] ?? 'all';
 
+        // Validation
+        $allowedSources = ['all', 'kso', 'listofcompany', 'osm'];
+        if (!in_array($sourceKey, $allowedSources)) {
+            $sourceKey = 'all';
+        }
+        $allowedLimits = [10, 25, 50];
+        if (!in_array($limit, $allowedLimits)) {
+            $limit = 25;
+        }
+        if (mb_strlen($query) > 100) $query = mb_substr($query, 0, 100);
+        if (mb_strlen($city) > 100) $city = mb_substr($city, 0, 100);
+        if (mb_strlen($district) > 100) $district = mb_substr($district, 0, 100);
+
         $leads = [];
+        $statuses = [];
 
         if (!empty($query)) {
             $finder = new LeadFinderService($sourceKey);
-            $leads = $finder->search($query, $city, $district, $limit);
+            $result = $finder->search($query, $city, $district, $limit);
+            $leads = $result['leads'];
+            $statuses = $result['statuses'];
         }
 
         $this->view('leads/index', [
             'page_title' => 'Firma Bul',
             'leads' => $leads,
+            'statuses' => $statuses,
             'filters' => [
                 'q' => $query,
                 'city' => $city,
@@ -60,6 +77,45 @@ class LeadsController extends Controller
         } else {
             echo json_encode(['success' => false, 'message' => 'Yeni bilgi bulunamadı veya erişim engellendi.']);
         }
+    }
+
+    public function save()
+    {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') return $this->error404();
+        Security::checkCsrfToken($_POST['csrf_token'] ?? '');
+
+        // Whitelist fields
+        $fields = [
+            'name', 'sector', 'phone', 'website', 'instagram', 
+            'facebook', 'linkedin', 'address', 'district', 'city', 'source'
+        ];
+        
+        $data = [];
+        foreach ($fields as $field) {
+            $data[$field] = $_POST[$field] ?? '';
+        }
+
+        if (empty($data['name'])) {
+            // Handle error, though name is required in form
+            die(json_encode(['success' => false, 'message' => 'Firma adı zorunludur.']));
+        }
+
+        $companyModel = new \App\Models\Company();
+        
+        // Duplicate check
+        $duplicate = $companyModel->findPotentialDuplicate($data['name'], $data['phone'], $data['website']);
+        if ($duplicate) {
+            // Redirect to existing
+            header("Location: " . BASE_PATH . "/companies/show/" . $duplicate['id'] . "?msg=duplicate");
+            exit;
+        }
+
+        // Save
+        $data['status'] = 'new';
+        $newId = $companyModel->create($data);
+
+        header("Location: " . BASE_PATH . "/companies/show/" . $newId);
+        exit;
     }
 
     private function error404()

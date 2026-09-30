@@ -28,18 +28,18 @@ class LeadNormalizer
     private static function isSame($a, $b)
     {
         // 1. Exact Website Domain Match
-        $domainA = self::getDomain($a['website'] ?? '');
-        $domainB = self::getDomain($b['website'] ?? '');
+        $domainA = self::normalizeDomain($a['website'] ?? '');
+        $domainB = self::normalizeDomain($b['website'] ?? '');
         if ($domainA && $domainA === $domainB) return true;
 
         // 2. Exact Phone Match
-        $phoneA = preg_replace('/[^0-9]/', '', $a['phone'] ?? '');
-        $phoneB = preg_replace('/[^0-9]/', '', $b['phone'] ?? '');
+        $phoneA = self::normalizePhone($a['phone'] ?? '');
+        $phoneB = self::normalizePhone($b['phone'] ?? '');
         if ($phoneA && $phoneB && $phoneA === $phoneB) return true;
 
         // 3. Name Match
-        $nameA = trim(mb_strtolower($a['name'] ?? '', 'UTF-8'));
-        $nameB = trim(mb_strtolower($b['name'] ?? '', 'UTF-8'));
+        $nameA = self::normalizeCompanyName($a['name'] ?? '');
+        $nameB = self::normalizeCompanyName($b['name'] ?? '');
         if ($nameA && $nameB && $nameA === $nameB) return true;
 
         return false;
@@ -53,7 +53,6 @@ class LeadNormalizer
             }
         }
         if ($existing['source'] !== $new['source'] && !empty($new['source'])) {
-             // Combine sources if different
              if (strpos($existing['source'], $new['source']) === false) {
                  $existing['source'] .= ', ' . $new['source'];
              }
@@ -61,14 +60,17 @@ class LeadNormalizer
         return $existing;
     }
 
-    private static function normalizeLead($lead)
+    public static function normalizeLead($lead)
     {
-        $lead['phone'] = self::formatPhone($lead['phone'] ?? '');
+        $lead['phone'] = self::normalizePhone($lead['phone'] ?? '');
         $lead['website'] = self::formatUrl($lead['website'] ?? '');
+        $lead['instagram'] = self::normalizeSocialUrl($lead['instagram'] ?? '');
+        $lead['facebook'] = self::normalizeSocialUrl($lead['facebook'] ?? '');
+        $lead['linkedin'] = self::normalizeSocialUrl($lead['linkedin'] ?? '');
         return $lead;
     }
 
-    private static function getDomain($url)
+    public static function normalizeDomain($url)
     {
         if (empty($url)) return '';
         if (!preg_match("~^(?:f|ht)tps?://~i", $url)) {
@@ -76,10 +78,11 @@ class LeadNormalizer
         }
         $parsed = parse_url($url);
         $host = $parsed['host'] ?? '';
+        $host = mb_strtolower($host, 'UTF-8');
         return preg_replace('/^www\./', '', $host);
     }
 
-    private static function formatPhone($phone)
+    public static function normalizePhone($phone)
     {
         if (empty($phone)) return '';
         $clean = preg_replace('/[^0-9]/', '', $phone);
@@ -87,15 +90,38 @@ class LeadNormalizer
             return '90' . $clean;
         } elseif (strlen($clean) === 11 && strpos($clean, '0') === 0) {
             return '9' . $clean;
+        } elseif (strlen($clean) === 12 && strpos($clean, '90') === 0) {
+            return $clean;
         }
-        return $clean; // Default fallback
+        return $clean;
+    }
+    
+    public static function normalizeCompanyName($name)
+    {
+        if (empty($name)) return '';
+        
+        $search = ['Ç','Ğ','İ','I','Ö','Ş','Ü','ç','ğ','ı','i','ö','ş','ü'];
+        $replace = ['c','g','i','i','o','s','u','c','g','i','i','o','s','u'];
+        $name = str_replace($search, $replace, $name);
+        
+        $name = mb_strtolower(trim($name), 'UTF-8');
+        return $name;
     }
 
-    private static function formatUrl($url)
+    public static function normalizeSocialUrl($url)
     {
         if (empty($url)) return '';
         if (!preg_match("~^(?:f|ht)tps?://~i", $url)) {
-            return "http://" . $url;
+            return "https://" . ltrim($url, '/');
+        }
+        return $url;
+    }
+
+    public static function formatUrl($url)
+    {
+        if (empty($url)) return '';
+        if (!preg_match("~^(?:f|ht)tps?://~i", $url)) {
+            return "http://" . ltrim($url, '/');
         }
         return $url;
     }
