@@ -59,10 +59,20 @@ $statusLabels = [
         <?php 
             $color = $stat['status'] === 'success' ? '#34d399' : ($stat['status'] === 'timeout' ? '#fbbf24' : '#f87171'); 
             $bg = $stat['status'] === 'success' ? 'rgba(16, 185, 129, 0.15)' : ($stat['status'] === 'timeout' ? 'rgba(251, 191, 36, 0.15)' : 'rgba(248, 113, 113, 0.15)');
+            
+            $statusTexts = [
+                'success' => 'Çalışıyor',
+                'empty' => 'Sonuç Yok',
+                'filtered_zero' => 'Eşleşme Yok',
+                'timeout' => 'Zaman Aşımı',
+                'unavailable' => 'Kullanılamıyor',
+                'error' => 'Hata'
+            ];
+            $displayStatus = $statusTexts[$stat['status']] ?? $stat['status'];
         ?>
         <div style="background: <?= $bg ?>; color: <?= $color ?>; padding: 0.25rem 0.75rem; border-radius: var(--radius-full); font-size: 0.875rem; display: flex; align-items: center; gap: 0.5rem;">
             <strong><?= $source ?></strong>: 
-            <?= $stat['status'] === 'success' ? $stat['count'] . ' kayıt (' . $stat['duration'] . ')' : $stat['status'] ?>
+            <?= $stat['status'] === 'success' ? $stat['count'] . ' kayıt (' . $stat['duration'] . ')' : $displayStatus ?>
         </div>
     <?php endforeach; ?>
 </div>

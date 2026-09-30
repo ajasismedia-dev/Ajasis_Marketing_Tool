@@ -6,6 +6,8 @@ use App\Services\LeadFinder\LeadSourceInterface;
 
 class OpenStreetMapSource implements LeadSourceInterface
 {
+    private $lastStatus = 'success';
+
     private $sectorMapping = [
         'mimarlık' => 'office=architect',
         'mimar' => 'office=architect',
@@ -16,6 +18,7 @@ class OpenStreetMapSource implements LeadSourceInterface
         'kuaför' => 'shop=hairdresser',
         'otomotiv' => 'shop=car',
         'oto tamir' => 'shop=car_repair',
+        'makina' => 'craft=machinist',
         'market' => 'shop=supermarket',
         'eczane' => 'amenity=pharmacy'
     ];
@@ -29,6 +32,7 @@ class OpenStreetMapSource implements LeadSourceInterface
 
     public function search($query, $city, $district, $limit)
     {
+        $this->lastStatus = 'success';
         $results = [];
         $searchQuery = mb_strtolower($this->sanitizeInput($query), 'UTF-8');
         $safeCity = $this->sanitizeInput($city ?: 'Konya');
@@ -49,34 +53,54 @@ class OpenStreetMapSource implements LeadSourceInterface
             $areaQuery = "area[\"name\"=\"{$safeCity}\"]->.city; area[\"name\"=\"{$safeDistrict}\"](area.city)->.searchArea;";
         }
         
-        $overpassQuery = "[out:json][timeout:10];
+        $overpassQuery = "[out:json][timeout:6];
         {$areaQuery}
         (
           node{$tagFilter}(area.searchArea);
           way{$tagFilter}(area.searchArea);
+          relation{$tagFilter}(area.searchArea);
         );
         out center {$limit};";
 
-        $url = "https://overpass-api.de/api/interpreter";
+        $endpoints = [
+            "https://overpass-api.de/api/interpreter",
+            "https://lz4.overpass-api.de/api/interpreter",
+            "https://overpass.kumi.systems/api/interpreter"
+        ];
         
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, "data=" . urlencode($overpassQuery));
-        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
-        curl_setopt($ch, CURLOPT_USERAGENT, 'AjasisMarketingTool/1.0');
-        $response = curl_exec($ch);
-        $error = curl_error($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        
+        $response = false;
+        $error = '';
+        $httpCode = 0;
 
-        if ($error || $httpCode >= 400 || !$response) return [];
+        foreach ($endpoints as $url) {
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, "data=" . urlencode($overpassQuery));
+            curl_setopt($ch, CURLOPT_TIMEOUT, 6);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+            curl_setopt($ch, CURLOPT_USERAGENT, 'AjasisMarketingTool/1.0');
+            $response = curl_exec($ch);
+            $error = curl_error($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            
+            if (!$error && $httpCode < 400 && $response) {
+                break; // success
+            }
+        }
+
+        if ($error || $httpCode >= 400 || !$response) {
+            $this->lastStatus = $error ? 'timeout' : 'unavailable';
+            return [];
+        }
 
         $data = json_decode($response, true);
-        if (empty($data['elements'])) return [];
+        if (empty($data['elements'])) {
+            $this->lastStatus = 'empty';
+            return [];
+        }
 
         foreach ($data['elements'] as $element) {
             $tags = $element['tags'] ?? [];
@@ -98,7 +122,14 @@ class OpenStreetMapSource implements LeadSourceInterface
                 'source_url' => 'https://www.openstreetmap.org/' . $element['type'] . '/' . $element['id']
             ];
         }
+        
+        if (empty($results)) $this->lastStatus = 'filtered_zero';
 
         return $results;
+    }
+
+    public function getLastStatus()
+    {
+        return $this->lastStatus;
     }
 }

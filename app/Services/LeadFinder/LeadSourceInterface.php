@@ -12,4 +12,9 @@ interface LeadSourceInterface
      * @return array
      */
     public function search($query, $city, $district, $limit);
+    
+    /**
+     * @return string
+     */
+    public function getLastStatus();
 }

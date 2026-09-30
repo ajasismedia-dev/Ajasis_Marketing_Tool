@@ -1,5 +1,6 @@
 <?php
 
+require_once __DIR__ . "/../app/Helpers/StringHelper.php";
 require_once __DIR__ . '/TestHelper.php';
 
 require_once __DIR__ . '/../app/Services/LeadFinder/LeadSourceInterface.php';

@@ -46,7 +46,7 @@ class LeadFinderService
                     ];
                 } else {
                     $this->sourceStatuses[$name] = [
-                        'status' => (microtime(true) - $startTime >= 4.5) ? 'timeout' : 'empty/unavailable',
+                        'status' => method_exists($source, 'getLastStatus') ? $source->getLastStatus() : 'empty',
                         'count' => 0,
                         'duration' => $duration . 's'
                     ];

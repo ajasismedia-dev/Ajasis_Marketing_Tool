@@ -11,4 +11,9 @@ class ListOfCompanySource implements LeadSourceInterface
         // Site returns 404 or blocks via Cloudflare. Marking as unavailable.
         return [];
     }
+
+    public function getLastStatus()
+    {
+        return 'unavailable';
+    }
 }
