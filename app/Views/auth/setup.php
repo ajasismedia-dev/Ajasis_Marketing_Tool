@@ -1,12 +1,8 @@
-<div class="auth-box glass-panel">
+<div class="auth-box">
     <div class="brand">
         ajasis <span>marketing</span>
     </div>
-
-    <div style="text-align: center; margin-bottom: 1.5rem;">
-        <h2 style="font-size: 1.25rem; font-weight: 600;">İlk Kurulum</h2>
-        <p style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 0.5rem;">Lütfen yönetici hesabınızı oluşturun.</p>
-    </div>
+    <div class="auth-subtitle">Lütfen yönetici hesabınızı oluşturun.</div>
 
     <?php if (!empty($error)): ?>
         <div class="alert-error">

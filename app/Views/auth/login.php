@@ -1,7 +1,8 @@
-<div class="auth-box glass-panel">
+<div class="auth-box">
     <div class="brand">
         ajasis <span>marketing</span>
     </div>
+    <div class="auth-subtitle">Hesabınıza giriş yapın.</div>
 
     <?php if (!empty($error)): ?>
         <div class="alert-error">

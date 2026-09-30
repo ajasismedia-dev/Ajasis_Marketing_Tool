@@ -9,13 +9,13 @@ $statusLabels = [
 ];
 ?>
 
-<div class="glass-panel" style="padding: 1.5rem; margin-bottom: 2rem;">
-    <form method="GET" action="<?= BASE_PATH ?>/companies" style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
-        <div style="flex: 1; min-width: 200px;">
+<div class="filter-bar">
+    <form method="GET" action="<?= BASE_PATH ?>/companies" style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; width: 100%;">
+        <div class="form-group" style="flex: 2; min-width: 200px;">
             <label class="form-label">Arama (Ad, Tel, Web)</label>
             <input type="text" name="q" class="form-input" value="<?= \App\Helpers\Security::escape($filters['q']) ?>" placeholder="Arama yapın...">
         </div>
-        <div style="width: 150px;">
+        <div class="form-group" style="flex: 1; min-width: 140px;">
             <label class="form-label">Durum</label>
             <select name="status" class="form-input">
                 <option value="">Tümü</option>
@@ -24,20 +24,18 @@ $statusLabels = [
                 <?php endforeach; ?>
             </select>
         </div>
-        <div style="width: 150px;">
+        <div class="form-group" style="flex: 1; min-width: 140px;">
             <label class="form-label">Sektör</label>
             <input type="text" name="sector" class="form-input" value="<?= \App\Helpers\Security::escape($filters['sector']) ?>">
         </div>
-        <div style="width: 150px;">
+        <div class="form-group" style="flex: 1; min-width: 140px;">
             <label class="form-label">İlçe</label>
             <input type="text" name="district" class="form-input" value="<?= \App\Helpers\Security::escape($filters['district']) ?>">
         </div>
-        <div>
-            <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Filtrele</button>
-            <a href="<?= BASE_PATH ?>/companies" class="btn" style="background: rgba(255,255,255,0.1); color: #fff;">Temizle</a>
-        </div>
-        <div style="margin-left: auto;">
-            <a href="<?= BASE_PATH ?>/companies/create" class="btn btn-primary"><i data-lucide="plus"></i> Yeni Firma</a>
+        <div class="filter-actions">
+            <button type="submit" class="btn btn-primary" style="width: auto;"><i data-lucide="filter"></i> Filtrele</button>
+            <a href="<?= BASE_PATH ?>/companies" class="btn btn-ghost" style="width: auto;"><i data-lucide="x"></i> Temizle</a>
+            <a href="<?= BASE_PATH ?>/companies/create" class="btn btn-secondary" style="width: auto; background: rgba(255,255,255,0.1);"><i data-lucide="plus"></i> Yeni Firma</a>
         </div>
     </form>
 </div>
@@ -59,7 +57,19 @@ $statusLabels = [
         <tbody>
             <?php if (empty($companies)): ?>
             <tr>
-                <td colspan="8" style="padding: 2rem; text-align: center; color: var(--text-secondary);">Kayıt bulunamadı.</td>
+                <td colspan="8" style="padding: 0; border: none;">
+                    <div class="empty-state" style="margin: 2rem auto; border: none; background: transparent;">
+                        <div class="empty-state-icon">
+                            <i data-lucide="building-2"></i>
+                        </div>
+                        <h3 class="empty-state-title">Henüz firma yok</h3>
+                        <p class="empty-state-desc">Firma Bul modülünden keşfedebilir veya manuel ekleyebilirsiniz.</p>
+                        <div class="empty-state-actions">
+                            <a href="<?= BASE_PATH ?>/leads" class="btn btn-primary" style="width: auto;">Firma Bul</a>
+                            <a href="<?= BASE_PATH ?>/companies/create" class="btn btn-secondary" style="width: auto;">Yeni Firma</a>
+                        </div>
+                    </div>
+                </td>
             </tr>
             <?php else: ?>
                 <?php foreach($companies as $company): ?>

@@ -61,7 +61,7 @@
                 <span><?= \App\Helpers\Security::escape($_SESSION['user_name'] ?? '') ?></span>
                 <form action="<?= BASE_PATH ?>/login/logout" method="POST" style="display:inline;">
                     <input type="hidden" name="csrf_token" value="<?= \App\Helpers\Security::generateCsrfToken() ?>">
-                    <button type="submit" class="logout-btn" style="background:none; border:none; cursor:pointer; display:flex; align-items:center; gap:0.5rem; font-family:inherit;">
+                    <button type="submit" class="logout-btn">
                         <i data-lucide="log-out"></i> Çıkış
                     </button>
                 </form>

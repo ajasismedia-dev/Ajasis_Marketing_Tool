@@ -9,21 +9,21 @@ $statusLabels = [
 ];
 ?>
 
-<div class="glass-panel" style="padding: 1.5rem; margin-bottom: 2rem;">
-    <form method="GET" action="<?= BASE_PATH ?>/leads" style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
-        <div style="flex: 1; min-width: 200px;">
+<div class="filter-bar">
+    <form method="GET" action="<?= BASE_PATH ?>/leads" style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; width: 100%;">
+        <div class="form-group" style="flex: 2; min-width: 200px;">
             <label class="form-label">Arama Kelimesi / Sektör</label>
             <input type="text" name="q" class="form-input" required value="<?= \App\Helpers\Security::escape($filters['q']) ?>" placeholder="Örn: Mimarlık, Makina...">
         </div>
-        <div style="width: 150px;">
+        <div class="form-group" style="flex: 1; min-width: 140px;">
             <label class="form-label">Şehir</label>
             <input type="text" name="city" class="form-input" value="<?= \App\Helpers\Security::escape($filters['city']) ?>">
         </div>
-        <div style="width: 150px;">
+        <div class="form-group" style="flex: 1; min-width: 140px;">
             <label class="form-label">İlçe</label>
             <input type="text" name="district" class="form-input" value="<?= \App\Helpers\Security::escape($filters['district']) ?>" placeholder="Tümü">
         </div>
-        <div style="width: 120px;">
+        <div class="form-group" style="flex: 1; min-width: 140px;">
             <label class="form-label">Max Sonuç</label>
             <select name="limit" class="form-input">
                 <option value="10" <?= $filters['limit'] == 10 ? 'selected' : '' ?>>10</option>
@@ -31,7 +31,7 @@ $statusLabels = [
                 <option value="50" <?= $filters['limit'] == 50 ? 'selected' : '' ?>>50</option>
             </select>
         </div>
-        <div style="width: 180px;">
+        <div class="form-group" style="flex: 1; min-width: 160px;">
             <label class="form-label">Kaynak</label>
             <select name="source" class="form-input">
                 <option value="all" <?= $filters['source'] === 'all' ? 'selected' : '' ?>>Tümü</option>
@@ -40,16 +40,14 @@ $statusLabels = [
                 <option value="osm" <?= $filters['source'] === 'osm' ? 'selected' : '' ?>>OpenStreetMap</option>
             </select>
         </div>
-        <div>
-            <button type="submit" class="btn btn-primary"><i data-lucide="search"></i> Ara</button>
-        </div>
-        <?php if (!empty($filters['q'])): ?>
-            <div style="margin-left: auto;">
-                <a href="https://www.google.com/maps/search/<?= urlencode($filters['q'] . ' ' . $filters['district'] . ' ' . $filters['city']) ?>" target="_blank" rel="noopener noreferrer" class="btn" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa;">
-                    <i data-lucide="map"></i> Google Maps'te Ara
+        <div class="filter-actions">
+            <button type="submit" class="btn btn-primary" style="width: auto;"><i data-lucide="search"></i> Ara</button>
+            <?php if (!empty($filters['q'])): ?>
+                <a href="https://www.google.com/maps/search/<?= urlencode($filters['q'] . ' ' . $filters['district'] . ' ' . $filters['city']) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="width: auto; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: none;">
+                    <i data-lucide="map"></i> Google Maps
                 </a>
-            </div>
-        <?php endif; ?>
+            <?php endif; ?>
+        </div>
     </form>
 </div>
 
@@ -396,4 +394,18 @@ function sendWhatsApp() {
 @keyframes spin { 100% { transform: rotate(360deg); } }
 .spin { animation: spin 1s linear infinite; }
 </style>
+<?php else: ?>
+<div class="empty-state">
+    <div class="empty-state-icon">
+        <i data-lucide="search"></i>
+    </div>
+    <h3 class="empty-state-title">Potansiyel firmaları keşfedin</h3>
+    <p class="empty-state-desc">Sektör veya firma türü yazarak Konya'daki işletmeleri farklı kaynaklardan tarayabilirsiniz.</p>
+    <div class="quick-search-chips">
+        <div class="chip" onclick="document.querySelector('input[name=q]').value='Mimarlık'; document.querySelector('form').submit();">Mimarlık</div>
+        <div class="chip" onclick="document.querySelector('input[name=q]').value='Mobilya'; document.querySelector('form').submit();">Mobilya</div>
+        <div class="chip" onclick="document.querySelector('input[name=q]').value='Makina'; document.querySelector('form').submit();">Makina</div>
+        <div class="chip" onclick="document.querySelector('input[name=q]').value='Restoran'; document.querySelector('form').submit();">Restoran</div>
+    </div>
+</div>
 <?php endif; ?>
