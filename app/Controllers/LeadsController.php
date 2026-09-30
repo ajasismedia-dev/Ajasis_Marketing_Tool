@@ -70,8 +70,11 @@ class LeadsController extends Controller
             die(json_encode(['success' => false, 'message' => 'URL eksik']));
         }
 
+        $parsed = parse_url($url);
+        $host = $parsed['host'] ?? '';
+        
         $data = [];
-        if (strpos($url, 'kso.org.tr') !== false) {
+        if (in_array(strtolower($host), ['kso.org.tr', 'www.kso.org.tr'])) {
             $kso = new \App\Services\LeadFinder\Sources\KsoSource();
             $lead = ['source_url' => $url];
             $enriched = $kso->enrichResult($lead);
@@ -113,7 +116,7 @@ class LeadsController extends Controller
 
         // Email validation
         if (!empty($data['email']) && !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
-            $data['email'] = '';
+            die(json_encode(['success' => false, 'message' => 'Geçerli bir e-posta adresi girin.']));
         }
 
         // Normalizations
@@ -123,13 +126,6 @@ class LeadsController extends Controller
         $data['instagram'] = $normalizer->normalizeSocialUrl($data['instagram']);
         $data['facebook'] = $normalizer->normalizeSocialUrl($data['facebook']);
         $data['linkedin'] = $normalizer->normalizeSocialUrl($data['linkedin']);
-
-        // Auto-assign whatsapp if phone is mobile and whatsapp is empty
-        if (empty($data['whatsapp']) && !empty($data['phone'])) {
-            if (strlen($data['phone']) === 12 && strpos($data['phone'], '905') === 0) {
-                $data['whatsapp'] = $data['phone'];
-            }
-        }
 
         $companyModel = new \App\Models\Company();
         

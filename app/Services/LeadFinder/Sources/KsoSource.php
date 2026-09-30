@@ -76,6 +76,12 @@ class KsoSource implements LeadSourceInterface
     {
         if (empty($lead['source_url'])) return $lead;
         
+        $parsed = parse_url($lead['source_url']);
+        $host = strtolower($parsed['host'] ?? '');
+        if (!in_array($host, ['kso.org.tr', 'www.kso.org.tr'])) {
+            return $lead; // Block arbitrary requests
+        }
+        
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $lead['source_url']);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);

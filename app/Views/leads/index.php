@@ -274,7 +274,17 @@ function enrichLead(btn, index, url) {
                 const websiteInput = document.getElementById('form-website-' + index);
                 if (!websiteInput.value) {
                     websiteInput.value = data.data.website;
-                    document.getElementById('lead-web-' + index).innerHTML = '<a href="'+data.data.website+'" target="_blank" style="color: var(--text-primary); text-decoration: underline;">'+data.data.website+'</a>';
+                    const a = document.createElement('a');
+                    a.href = data.data.website;
+                    a.target = '_blank';
+                    a.rel = 'noopener noreferrer';
+                    a.style.color = 'var(--text-primary)';
+                    a.style.textDecoration = 'underline';
+                    a.textContent = data.data.website;
+                    
+                    const container = document.getElementById('lead-web-' + index);
+                    container.innerHTML = '';
+                    container.appendChild(a);
                 }
             }
             
@@ -286,6 +296,7 @@ function enrichLead(btn, index, url) {
                         const a = document.createElement('a');
                         a.href = val;
                         a.target = '_blank';
+                        a.rel = 'noopener noreferrer';
                         a.style.color = 'var(--text-secondary)';
                         a.style.display = 'block';
                         a.textContent = type.charAt(0).toUpperCase() + type.slice(1);

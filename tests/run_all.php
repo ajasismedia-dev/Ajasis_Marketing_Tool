@@ -36,10 +36,8 @@ $ksoRes = $kso->search('plastik', 'Konya', '', 3);
 TestHelper::assertTrue(is_array($ksoRes), 'KSO search returns array');
 
 // Skip some network heavy tests but allow basic execution
-TestHelper::skip('JSON-LD deep checking (tested manually via konya.bel.tr)');
-TestHelper::skip('Internal relative URL (tested manually via konya.bel.tr)');
 TestHelper::skip('OSM mapping (tested manually)');
 TestHelper::skip('Duplicate DB detection (tested via UI manually)');
 TestHelper::skip('Email lead->company transfer (tested via UI controller check)');
 
-TestHelper::finish();
+require __DIR__ . '/test_string_parsing.php';
