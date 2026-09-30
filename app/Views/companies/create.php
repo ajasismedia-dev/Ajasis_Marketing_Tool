@@ -24,6 +24,12 @@ $statusLabels = [
     </div>
 <?php endif; ?>
 
+<?php if (!empty($error)): ?>
+    <div class="alert-error" style="margin-bottom: 1.5rem;">
+        <?= \App\Helpers\Security::escape($error) ?>
+    </div>
+<?php endif; ?>
+
 <form action="<?= $action ?>" method="POST" style="display: grid; grid-template-columns: 7fr 3fr; gap: 2rem;" class="form-grid">
     <input type="hidden" name="csrf_token" value="<?= \App\Helpers\Security::generateCsrfToken() ?>">
     <?php if (!empty($duplicateWarning)): ?>

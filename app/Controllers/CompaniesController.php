@@ -26,7 +26,7 @@ class CompaniesController extends Controller
             'district' => $_GET['district'] ?? ''
         ];
 
-        $page = isset($_GET['page']) && is_numeric($_GET['page']) ? (int)$_GET['page'] : 1;
+        $page = isset($_GET['page']) && is_numeric($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
         $limit = 20;
         $offset = ($page - 1) * $limit;
 
@@ -60,6 +60,15 @@ class CompaniesController extends Controller
         
         if (empty($data['name'])) {
             die('Firma adı zorunludur.');
+        }
+
+        if (!empty($_POST['email']) && !filter_var($_POST['email'], FILTER_VALIDATE_EMAIL)) {
+            return $this->view('companies/create', ['page_title' => 'Yeni Firma Ekle', 'error' => 'Geçerli bir e-posta adresi girin.', 'formData' => $data], 'main');
+        }
+
+        $validStatuses = ['new', 'contacted', 'replied', 'proposal', 'customer', 'negative'];
+        if (!in_array($data['status'], $validStatuses)) {
+            $data['status'] = 'new';
         }
 
         // Duplicate check unless confirmed
@@ -97,6 +106,17 @@ class CompaniesController extends Controller
         $data = $this->extractFormData($_POST);
         if (empty($data['name'])) {
             die('Firma adı zorunludur.');
+        }
+
+        if (!empty($_POST['email']) && !filter_var($_POST['email'], FILTER_VALIDATE_EMAIL)) {
+            $company = $this->companyModel->findById($id);
+            $company = array_merge($company, $data);
+            return $this->view('companies/edit', ['page_title' => 'Firma Düzenle', 'error' => 'Geçerli bir e-posta adresi girin.', 'company' => $company], 'main');
+        }
+
+        $validStatuses = ['new', 'contacted', 'replied', 'proposal', 'customer', 'negative'];
+        if (!in_array($data['status'], $validStatuses)) {
+            $data['status'] = 'new';
         }
 
         $this->companyModel->update($id, $data);

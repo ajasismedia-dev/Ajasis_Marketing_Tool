@@ -28,6 +28,10 @@ $statusLabels = [
             <label class="form-label">Sektör</label>
             <input type="text" name="sector" class="form-input" value="<?= \App\Helpers\Security::escape($filters['sector']) ?>">
         </div>
+        <div style="width: 150px;">
+            <label class="form-label">İlçe</label>
+            <input type="text" name="district" class="form-input" value="<?= \App\Helpers\Security::escape($filters['district']) ?>">
+        </div>
         <div>
             <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Filtrele</button>
             <a href="<?= BASE_PATH ?>/companies" class="btn" style="background: rgba(255,255,255,0.1); color: #fff;">Temizle</a>
@@ -46,6 +50,7 @@ $statusLabels = [
                 <th style="padding: 1rem;">Sektör</th>
                 <th style="padding: 1rem;">Telefon</th>
                 <th style="padding: 1rem;">İlçe</th>
+                <th style="padding: 1rem;">Kaynak</th>
                 <th style="padding: 1rem;">Durum</th>
                 <th style="padding: 1rem;">Son İletişim</th>
                 <th style="padding: 1rem;">İşlemler</th>
@@ -54,7 +59,7 @@ $statusLabels = [
         <tbody>
             <?php if (empty($companies)): ?>
             <tr>
-                <td colspan="7" style="padding: 2rem; text-align: center; color: var(--text-secondary);">Kayıt bulunamadı.</td>
+                <td colspan="8" style="padding: 2rem; text-align: center; color: var(--text-secondary);">Kayıt bulunamadı.</td>
             </tr>
             <?php else: ?>
                 <?php foreach($companies as $company): ?>
@@ -67,6 +72,7 @@ $statusLabels = [
                     <td style="padding: 1rem; color: var(--text-secondary);"><?= \App\Helpers\Security::escape($company['sector']) ?></td>
                     <td style="padding: 1rem;"><?= \App\Helpers\Security::escape($company['phone']) ?></td>
                     <td style="padding: 1rem; color: var(--text-secondary);"><?= \App\Helpers\Security::escape($company['district']) ?></td>
+                    <td style="padding: 1rem; color: var(--text-secondary);"><?= \App\Helpers\Security::escape($company['source']) ?: '-' ?></td>
                     <td style="padding: 1rem;">
                         <span class="status-badge status-<?= $company['status'] ?>">
                             <?= $statusLabels[$company['status']] ?>

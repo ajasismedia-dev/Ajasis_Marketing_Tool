@@ -125,12 +125,27 @@ class Company
 
     public function findPotentialDuplicate($name, $phone, $website)
     {
-        $sql = "SELECT id, name FROM companies WHERE name = :name OR (phone != '' AND phone = :phone) OR (website != '' AND website = :website) LIMIT 1";
+        $name = trim(strtolower($name));
+        $phone = preg_replace('/[^0-9]/', '', $phone ?? '');
+        
+        $website = $website ?? '';
+        if ($website) {
+            $parsed = parse_url($website);
+            $website = $parsed['host'] ?? $website;
+            $website = preg_replace('/^www\./', '', $website);
+        }
+
+        $sql = "SELECT id, name FROM companies 
+                WHERE LOWER(TRIM(name)) = :name 
+                OR (phone != '' AND REPLACE(REPLACE(REPLACE(phone, ' ', ''), '+', ''), '-', '') = :phone) 
+                OR (website != '' AND website LIKE :website) 
+                LIMIT 1";
+
         $stmt = $this->db->prepare($sql);
         $stmt->execute([
             'name' => $name,
-            'phone' => $phone ?? '',
-            'website' => $website ?? ''
+            'phone' => $phone,
+            'website' => $website ? '%' . $website . '%' : 'impossible_match'
         ]);
         return $stmt->fetch();
     }
