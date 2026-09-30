@@ -50,3 +50,17 @@ Ajasis Media için özel olarak geliştirilen pazarlama ve lead yönetim uygulam
    - Production veritabanı bilgilerinizi (`DB_NAME`, `DB_USER`, `DB_PASS`) girin.
 4. `storage/logs` klasörüne PHP/web sunucusu yazma izni (chmod 755 veya 775) verin.
 5. `config`, `app`, `database`, `storage` klasörlerinin içindeki `.htaccess` dosyalarının dışarıdan erişimi kapattığını test edin (Örn: `https://ajasismedia.com/marketingtool/config/config.php` 403 Forbidden vermelidir).
+
+## Google Places API (New) Yapılandırması & Güvenlik
+Lead zenginleştirme (telefon, web sitesi, adres, koordinat vb.) için Google Cloud Console üzerinden **Places API (New)** kullanılmaktadır.
+
+1. **Google Cloud Console** üzerinde yeni veya mevcut projenizde **Places API (New)** servisini etkinleştirin (Eski Places API değil).
+2. API Anahtarınızı oluştururken güvenlik kısıtlamalarını (restrictions) uygulayın:
+   - **API Restrictions**: Sadece `Places API (New)` seçin.
+   - **Application Restrictions**: Server-side cURL ile çalışacağı için IP kısıtlaması (production sunucunuzun IP adresi) önerilir.
+3. `config/config.php` dosyasına anahtarınızı tanımlayın:
+   ```php
+   define('GOOGLE_PLACES_API_KEY', 'AIzaSy...');
+   define('GOOGLE_PLACES_ENABLED', true);
+   ```
+4. **Önemli Güvenlik Notu**: API anahtarı asla frontend JavaScript'e gönderilmez, HTML sayfalarına basılmaz, loglara yazılmaz ve git commit'lerine dahil edilmez. Sistemde API anahtarı yoksa uygulama çökmez; otomatik zenginleştirme "Yapılandırılmadı" olarak işaretlenir.

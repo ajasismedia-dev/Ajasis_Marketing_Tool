@@ -24,7 +24,7 @@ class LeadsController extends Controller
         $sourceKey = $_GET['source'] ?? 'all';
 
         // Validation
-        $allowedSources = ['all', 'kso', 'listofcompany', 'osm'];
+        $allowedSources = ['all', 'kto', 'kso', 'osm'];
         if (!in_array($sourceKey, $allowedSources)) {
             $sourceKey = 'all';
         }
@@ -94,6 +94,26 @@ class LeadsController extends Controller
         exit;
     }
 
+    public function enrichGoogle()
+    {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') return $this->error404();
+        \App\Helpers\Security::checkCsrfToken($_POST['csrf_token'] ?? '');
+
+        $name = trim($_POST['name'] ?? '');
+        $city = trim($_POST['city'] ?? 'Konya');
+        $district = trim($_POST['district'] ?? '');
+        $force = !empty($_POST['force']);
+
+        if (empty($name)) {
+            echo json_encode(['success' => false, 'message' => 'Firma adı eksik.']);
+            exit;
+        }
+
+        $result = \App\Services\LeadFinder\Enrichment\GooglePlacesEnricher::enrich($name, $city, $district, $force);
+        echo json_encode($result);
+        exit;
+    }
+
     public function save()
     {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') return $this->error404();
@@ -102,7 +122,8 @@ class LeadsController extends Controller
         // Whitelist fields
         $fields = [
             'name', 'sector', 'phone', 'whatsapp', 'email', 'website', 'instagram', 
-            'facebook', 'linkedin', 'address', 'district', 'city', 'source'
+            'facebook', 'linkedin', 'address', 'district', 'city', 'source',
+            'google_place_id', 'google_maps_uri', 'enrichment_status'
         ];
         
         $data = [];

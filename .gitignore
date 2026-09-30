@@ -9,6 +9,11 @@ storage/logs/*
 storage/sessions/*
 !storage/sessions/.htaccess
 !storage/sessions/index.html
+storage/cache/*
+!storage/cache/.gitkeep
+!storage/cache/google_places/
+storage/cache/google_places/*
+!storage/cache/google_places/.gitkeep
 
 # OS generated files
 .DS_Store

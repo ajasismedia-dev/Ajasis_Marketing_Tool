@@ -37,12 +37,38 @@ class LeadNormalizer
         $phoneB = self::normalizePhone($b['phone'] ?? '');
         if ($phoneA && $phoneB && $phoneA === $phoneB) return true;
 
-        // 3. Name Match
+        // 3. Exact Name Match
         $nameA = self::normalizeCompanyName($a['name'] ?? '');
         $nameB = self::normalizeCompanyName($b['name'] ?? '');
         if ($nameA && $nameB && $nameA === $nameB) return true;
 
+        // 4. Core Name Match (Stripping company legal suffixes for HIGH confidence deduplication)
+        $coreA = self::normalizeCoreCompanyName($a['name'] ?? '');
+        $coreB = self::normalizeCoreCompanyName($b['name'] ?? '');
+        if ($coreA && $coreB && mb_strlen($coreA) >= 4 && mb_strlen($coreB) >= 4 && $coreA === $coreB) {
+            return true;
+        }
+
         return false;
+    }
+
+    public static function normalizeCoreCompanyName($name)
+    {
+        if (empty($name)) return '';
+        $name = self::normalizeCompanyName($name);
+        $name = preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $name);
+        
+        $suffixes = [
+            '\\banonim sirketi\\b', '\\blimited sirketi\\b', '\\bltd sti\\b', '\\bltd\\b', '\\bsti\\b',
+            '\\ba s\\b', '\\bas\\b', '\\bsanayi ve ticaret\\b', '\\bsan ve tic\\b', '\\bsanayi ve tic\\b',
+            '\\bsanayi\\b', '\\bticaret\\b', '\\bsan\\b', '\\btic\\b', '\\bve\\b', '\\bholding\\b',
+            '\\bsirketi\\b', '\\bkollektif sirketi\\b', '\\bkomandit sirketi\\b', '\\bsubesi\\b',
+            '\\bmerkezi\\b'
+        ];
+        foreach ($suffixes as $s) {
+            $name = preg_replace('/' . $s . '/u', ' ', $name);
+        }
+        return preg_replace('/\s+/', ' ', trim($name));
     }
 
     private static function merge($existing, $new)

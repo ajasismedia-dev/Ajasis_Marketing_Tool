@@ -2,6 +2,7 @@
 
 namespace App\Services\LeadFinder;
 
+use App\Services\LeadFinder\Sources\KtoSource;
 use App\Services\LeadFinder\Sources\KsoSource;
 use App\Services\LeadFinder\Sources\ListOfCompanySource;
 use App\Services\LeadFinder\Sources\OpenStreetMapSource;
@@ -15,14 +16,18 @@ class LeadFinderService
 
     public function __construct($sourceKey = 'all')
     {
+        // Source Order: 1. KTO, 2. KSO, 3. OSM
+        if ($sourceKey === 'all' || $sourceKey === 'kto') {
+            $this->sources['KTO'] = new KtoSource();
+        }
         if ($sourceKey === 'all' || $sourceKey === 'kso') {
             $this->sources['KSO'] = new KsoSource();
         }
-        if ($sourceKey === 'all' || $sourceKey === 'listofcompany') {
-            $this->sources['ListOfCompany'] = new ListOfCompanySource();
-        }
         if ($sourceKey === 'all' || $sourceKey === 'osm') {
             $this->sources['OSM'] = new OpenStreetMapSource();
+        }
+        if ($sourceKey === 'listofcompany') {
+            $this->sources['ListOfCompany'] = new ListOfCompanySource();
         }
     }
 

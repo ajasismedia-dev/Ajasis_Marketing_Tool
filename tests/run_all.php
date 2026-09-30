@@ -8,11 +8,15 @@ require_once __DIR__ . '/../app/Services/LeadFinder/Helpers/LeadNormalizer.php';
 require_once __DIR__ . '/../app/Services/LeadFinder/Enrichment/WebsiteEnricher.php';
 require_once __DIR__ . '/../app/Services/LeadFinder/Sources/ListOfCompanySource.php';
 require_once __DIR__ . '/../app/Services/LeadFinder/Sources/KsoSource.php';
+require_once __DIR__ . '/../app/Services/LeadFinder/Sources/KtoSource.php';
+require_once __DIR__ . '/../app/Services/LeadFinder/Enrichment/GooglePlacesEnricher.php';
 
 use App\Services\LeadFinder\Helpers\LeadNormalizer;
 use App\Services\LeadFinder\Enrichment\WebsiteEnricher;
+use App\Services\LeadFinder\Enrichment\GooglePlacesEnricher;
 use App\Services\LeadFinder\Sources\ListOfCompanySource;
 use App\Services\LeadFinder\Sources\KsoSource;
+use App\Services\LeadFinder\Sources\KtoSource;
 
 echo "--- NORMALIZATION TESTS ---\n";
 TestHelper::assertEqual('905321234567', LeadNormalizer::normalizePhone('0532 123 45 67'), 'Phone with spaces');
@@ -49,5 +53,20 @@ try {
 TestHelper::skip('OSM mapping (tested manually)');
 TestHelper::skip('Duplicate DB detection (tested via UI manually)');
 TestHelper::skip('Email lead->company transfer (tested via UI controller check)');
+
+echo "\n--- KTO & GOOGLE PLACES TESTS ---\n";
+$kto = new KtoSource();
+$committees = $kto->getCommittees();
+TestHelper::assertTrue(count($committees) >= 70, 'KTO committees count >= 70');
+TestHelper::assertEqual('MİMARLIK FAALİYETLERİ', $committees['21'] ?? '', 'KTO committee 21 is MİMARLIK FAALİYETLERİ');
+
+$confHigh = GooglePlacesEnricher::calculateConfidence('ADALET DÖKÜM ANONİM ŞİRKETİ', 'Adalet Döküm', 'Karatay, Konya');
+TestHelper::assertEqual('HIGH', $confHigh['level'], 'Google match confidence HIGH for core name in Konya');
+
+$confLow = GooglePlacesEnricher::calculateConfidence('ADALET DÖKÜM ANONİM ŞİRKETİ', 'Adalet Döküm', 'Çankaya, Ankara');
+TestHelper::assertEqual('LOW', $confLow['level'], 'Google match confidence LOW for city mismatch');
+
+$enrichEmpty = GooglePlacesEnricher::enrich('');
+TestHelper::assertEqual(false, $enrichEmpty['success'], 'Google Places empty query rejected');
 
 require __DIR__ . '/test_string_parsing.php';

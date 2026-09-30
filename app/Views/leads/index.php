@@ -35,18 +35,13 @@ $statusLabels = [
             <label class="form-label">Kaynak</label>
             <select name="source" class="form-input">
                 <option value="all" <?= $filters['source'] === 'all' ? 'selected' : '' ?>>Tümü</option>
+                <option value="kto" <?= $filters['source'] === 'kto' ? 'selected' : '' ?>>Konya Ticaret Odası</option>
                 <option value="kso" <?= $filters['source'] === 'kso' ? 'selected' : '' ?>>Konya Sanayi Odası</option>
-                <option value="listofcompany" <?= $filters['source'] === 'listofcompany' ? 'selected' : '' ?>>List of Company</option>
                 <option value="osm" <?= $filters['source'] === 'osm' ? 'selected' : '' ?>>OpenStreetMap</option>
             </select>
         </div>
         <div class="filter-actions">
             <button type="submit" class="btn btn-primary" style="width: auto;"><i data-lucide="search"></i> Ara</button>
-            <?php if (!empty($filters['q'])): ?>
-                <a href="https://www.google.com/maps/search/<?= urlencode($filters['q'] . ' ' . $filters['district'] . ' ' . $filters['city']) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="width: auto; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: none;">
-                    <i data-lucide="map"></i> Google Maps
-                </a>
-            <?php endif; ?>
         </div>
     </form>
 </div>
@@ -95,16 +90,16 @@ $statusLabels = [
         <tbody>
             <?php if (empty($leads)): ?>
             <tr>
-                <td colspan="8" style="padding: 2rem; text-align: center; color: var(--text-secondary);">
-                    Sonuç bulunamadı. <br><br>
-                    <a href="https://www.google.com/maps/search/<?= urlencode($filters['q'] . ' ' . $filters['district'] . ' ' . $filters['city']) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="display: inline-flex;">Google Maps'te Ara</a>
+                <td colspan="8" style="padding: 2.5rem 1rem; text-align: center; color: var(--text-secondary);">
+                    <i data-lucide="search-x" style="width: 36px; height: 36px; margin: 0 auto 0.75rem; opacity: 0.5; display: block;"></i>
+                    Aradığınız kriterlere uygun firma kaydı bulunamadı. Lütfen arama terimini değiştirin.
                 </td>
             </tr>
             <?php else: ?>
                 <?php foreach($leads as $i => $lead): ?>
                 <tr style="border-bottom: 1px solid var(--card-border);" id="lead-row-<?= $i ?>">
                     <td style="padding: 1rem; font-weight: 500;">
-                        <?= \App\Helpers\Security::escape($lead['name']) ?>
+                        <span id="lead-name-<?= $i ?>"><?= \App\Helpers\Security::escape($lead['name']) ?></span>
                     </td>
                     <td style="padding: 1rem; color: var(--text-secondary);">
                         <span id="lead-sector-<?= $i ?>"><?= \App\Helpers\Security::escape($lead['sector']) ?></span>
@@ -157,15 +152,22 @@ $statusLabels = [
                                 <input type="hidden" name="linkedin" id="form-linkedin-<?= $i ?>" value="<?= \App\Helpers\Security::escape($lead['linkedin'] ?? '') ?>">
                                 <input type="hidden" name="district" value="<?= \App\Helpers\Security::escape($lead['district'] ?? '') ?>">
                                 <input type="hidden" name="city" value="<?= \App\Helpers\Security::escape($lead['city'] ?? '') ?>">
-                                <input type="hidden" name="address" value="<?= \App\Helpers\Security::escape($lead['address'] ?? '') ?>">
-                                <input type="hidden" name="source" value="<?= \App\Helpers\Security::escape($lead['source'] ?? '') ?>">
+                                <input type="hidden" name="address" id="form-address-<?= $i ?>" value="<?= \App\Helpers\Security::escape($lead['address'] ?? '') ?>">
+                                <input type="hidden" name="source" id="form-source-<?= $i ?>" value="<?= \App\Helpers\Security::escape($lead['source'] ?? '') ?>">
+                                <input type="hidden" name="google_place_id" id="form-google-place-id-<?= $i ?>" value="">
+                                <input type="hidden" name="google_maps_uri" id="form-google-maps-uri-<?= $i ?>" value="">
+                                <input type="hidden" name="enrichment_status" id="form-enrichment-status-<?= $i ?>" value="">
                                 <button type="submit" class="btn btn-primary" style="padding: 0.5rem;"><i data-lucide="plus"></i> Kaydet</button>
                             </form>
                         <?php endif; ?>
                         
+                        <button type="button" class="btn google-enrich-btn" data-index="<?= $i ?>" data-name="<?= \App\Helpers\Security::escape($lead['name']) ?>" data-city="<?= \App\Helpers\Security::escape($lead['city'] ?? 'Konya') ?>" data-district="<?= \App\Helpers\Security::escape($lead['district'] ?? '') ?>" style="padding: 0.5rem; background: rgba(59, 130, 246, 0.15); color: #60a5fa;" title="Google Places ve Web Sitesinden Otomatik Zenginleştir">
+                            <i data-lucide="sparkles"></i> Google ile Zenginleştir
+                        </button>
+
                         <?php if ($lead['website']): ?>
                             <button type="button" class="btn enrich-btn" data-index="<?= $i ?>" data-url="<?= \App\Helpers\Security::escape($lead['website']) ?>" style="padding: 0.5rem; background: rgba(168, 85, 247, 0.15); color: #c084fc;">
-                                <i data-lucide="zap"></i> Zenginleştir
+                                <i data-lucide="globe"></i> Web Tara
                             </button>
                         <?php elseif (strpos($lead['source_url'] ?? '', 'kso.org.tr') !== false): ?>
                             <button type="button" class="btn enrich-btn" data-index="<?= $i ?>" data-url="<?= \App\Helpers\Security::escape($lead['source_url']) ?>" style="padding: 0.5rem; background: rgba(168, 85, 247, 0.15); color: #c084fc;">
@@ -224,6 +226,17 @@ $statusLabels = [
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.google-enrich-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const button = e.currentTarget;
+            const index = button.getAttribute('data-index');
+            const name = button.getAttribute('data-name');
+            const city = button.getAttribute('data-city') || 'Konya';
+            const district = button.getAttribute('data-district') || '';
+            enrichGoogleLead(button, index, name, city, district, false);
+        });
+    });
+
     document.querySelectorAll('.enrich-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const button = e.currentTarget;
@@ -262,6 +275,149 @@ document.addEventListener('DOMContentLoaded', () => {
         sendWhatsApp();
     });
 });
+
+function enrichGoogleLead(btn, index, name, city, district, force) {
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i data-lucide="loader" class="spin"></i> Aranıyor...';
+    btn.disabled = true;
+    if (window.lucide) lucide.createIcons();
+
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('city', city);
+    formData.append('district', district);
+    if (force) formData.append('force', '1');
+    formData.append('csrf_token', '<?= \App\Helpers\Security::generateCsrfToken() ?>');
+
+    fetch('<?= BASE_PATH ?>/leads/enrichGoogle', {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (!res.success) {
+            alert(res.message || 'Google Places eşleşmesi bulunamadı.');
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+            if (window.lucide) lucide.createIcons();
+            return;
+        }
+
+        if (res.status === 'medium_confidence' && !force) {
+            const cand = res.candidate;
+            const confirmMsg = `Muhtemel Google Places Eşleşmesi:\n\nİşletme: ${cand.display_name}\nAdres: ${cand.formatted_address}\n\nBu işletme bilgilerini doğrulamak ve detayları çekmek istiyor musunuz?`;
+            if (confirm(confirmMsg)) {
+                enrichGoogleLead(btn, index, name, city, district, true);
+            } else {
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+                if (window.lucide) lucide.createIcons();
+            }
+            return;
+        }
+
+        // Apply enriched data
+        if (res.phone) {
+            const pSpan = document.getElementById('lead-phone-' + index);
+            if (pSpan) pSpan.textContent = res.phone;
+            const fPhone = document.getElementById('form-phone-' + index);
+            if (fPhone) fPhone.value = res.phone;
+        }
+        if (res.website) {
+            const fWeb = document.getElementById('form-website-' + index);
+            if (fWeb) fWeb.value = res.website;
+            const webContainer = document.getElementById('lead-web-' + index);
+            if (webContainer) {
+                const a = document.createElement('a');
+                a.href = res.website;
+                a.target = '_blank';
+                a.rel = 'noopener noreferrer';
+                a.style.color = 'var(--color-primary)';
+                a.style.display = 'block';
+                a.textContent = 'Website';
+                webContainer.prepend(a);
+            }
+        }
+        if (res.email) {
+            const fEmail = document.getElementById('form-email-' + index);
+            if (fEmail) fEmail.value = res.email;
+        }
+        if (res.instagram) {
+            const fInsta = document.getElementById('form-instagram-' + index);
+            if (fInsta) fInsta.value = res.instagram;
+            const webContainer = document.getElementById('lead-web-' + index);
+            if (webContainer && !webContainer.innerHTML.includes('Instagram')) {
+                const a = document.createElement('a');
+                a.href = res.instagram;
+                a.target = '_blank';
+                a.rel = 'noopener noreferrer';
+                a.style.color = 'var(--text-secondary)';
+                a.style.display = 'block';
+                a.textContent = 'Instagram';
+                webContainer.appendChild(a);
+            }
+        }
+        if (res.facebook) {
+            const fFb = document.getElementById('form-facebook-' + index);
+            if (fFb) fFb.value = res.facebook;
+        }
+        if (res.linkedin) {
+            const fLi = document.getElementById('form-linkedin-' + index);
+            if (fLi) fLi.value = res.linkedin;
+        }
+        if (res.address) {
+            const fAddr = document.getElementById('form-address-' + index);
+            if (fAddr) fAddr.value = res.address;
+        }
+        if (res.google_place_id) {
+            const fGid = document.getElementById('form-google-place-id-' + index);
+            if (fGid) fGid.value = res.google_place_id;
+        }
+        if (res.google_maps_uri) {
+            const fGuri = document.getElementById('form-google-maps-uri-' + index);
+            if (fGuri) fGuri.value = res.google_maps_uri;
+        }
+        const fStatus = document.getElementById('form-enrichment-status-' + index);
+        if (fStatus) fStatus.value = 'google_enriched';
+
+        // Update Source badge
+        const row = document.getElementById('lead-row-' + index);
+        if (row) {
+            const srcCell = row.children[5];
+            if (srcCell && !srcCell.textContent.includes('Google Places')) {
+                srcCell.innerHTML += '<span style="font-size:0.75rem; color:#60a5fa; display:block;">+ ' + (res.source_trace || 'Google Places') + '</span>';
+            }
+        }
+
+        // Update WhatsApp button
+        const waBtn = btn.parentElement.querySelector('.wa-btn');
+        if (waBtn) {
+            const curPhone = (document.getElementById('form-phone-' + index) ? document.getElementById('form-phone-' + index).value : '') || '';
+            const curWa = (document.getElementById('form-whatsapp-' + index) ? document.getElementById('form-whatsapp-' + index).value : '') || '';
+            waBtn.setAttribute('data-phone', curPhone);
+            waBtn.setAttribute('data-whatsapp', curWa);
+            const hasWa = curWa.length > 0;
+            const isMob = curPhone.length >= 10 && (curPhone.startsWith('05') || curPhone.startsWith('905') || curPhone.startsWith('+905') || curPhone.startsWith('5'));
+            if (hasWa || isMob) {
+                waBtn.removeAttribute('disabled');
+            } else {
+                waBtn.setAttribute('disabled', 'disabled');
+            }
+        }
+
+        btn.innerHTML = '<i data-lucide="check"></i> Zenginleştirildi';
+        btn.style.background = 'rgba(16, 185, 129, 0.15)';
+        btn.style.color = '#34d399';
+        btn.disabled = true;
+        if (window.lucide) lucide.createIcons();
+    })
+    .catch(err => {
+        alert('İşlem sırasında bir hata oluştu.');
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+        if (window.lucide) lucide.createIcons();
+    });
+}
 
 function enrichLead(btn, index, url) {
     const originalHtml = btn.innerHTML;

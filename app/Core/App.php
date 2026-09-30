@@ -39,8 +39,13 @@ class App
         if (isset($url[1])) {
             // Strictly allow only a-zA-Z0-9_- for method names
             if (preg_match('/^[a-zA-Z0-9_-]+$/', $url[1])) {
-                if (method_exists($this->controller, $url[1])) {
-                    $this->method = $url[1];
+                $candidateMethod = $url[1];
+                $camelMethod = lcfirst(str_replace(' ', '', ucwords(str_replace(['-', '_'], ' ', $candidateMethod))));
+                if (method_exists($this->controller, $candidateMethod)) {
+                    $this->method = $candidateMethod;
+                    unset($url[1]);
+                } elseif (method_exists($this->controller, $camelMethod)) {
+                    $this->method = $camelMethod;
                     unset($url[1]);
                 } else {
                     // Method specified but not found: strict 404
