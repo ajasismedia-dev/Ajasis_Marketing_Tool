@@ -99,17 +99,25 @@ class LeadsController extends Controller
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') return $this->error404();
         \App\Helpers\Security::checkCsrfToken($_POST['csrf_token'] ?? '');
 
+        $action = trim($_POST['action'] ?? '');
+        $matchToken = trim($_POST['match_token'] ?? '');
+
+        if ($action === 'confirm' && !empty($matchToken)) {
+            $result = \App\Services\LeadFinder\Enrichment\GooglePlacesEnricher::confirmMatch($matchToken);
+            echo json_encode($result);
+            exit;
+        }
+
         $name = trim($_POST['name'] ?? '');
         $city = trim($_POST['city'] ?? 'Konya');
         $district = trim($_POST['district'] ?? '');
-        $force = !empty($_POST['force']);
 
         if (empty($name)) {
             echo json_encode(['success' => false, 'message' => 'Firma adı eksik.']);
             exit;
         }
 
-        $result = \App\Services\LeadFinder\Enrichment\GooglePlacesEnricher::enrich($name, $city, $district, $force);
+        $result = \App\Services\LeadFinder\Enrichment\GooglePlacesEnricher::enrich($name, $city, $district);
         echo json_encode($result);
         exit;
     }

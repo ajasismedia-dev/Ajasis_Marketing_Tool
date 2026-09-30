@@ -276,7 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-function enrichGoogleLead(btn, index, name, city, district, force) {
+function enrichGoogleLead(btn, index, name, city, district) {
     const originalHtml = btn.innerHTML;
     btn.innerHTML = '<i data-lucide="loader" class="spin"></i> Aranıyor...';
     btn.disabled = true;
@@ -286,7 +286,6 @@ function enrichGoogleLead(btn, index, name, city, district, force) {
     formData.append('name', name);
     formData.append('city', city);
     formData.append('district', district);
-    if (force) formData.append('force', '1');
     formData.append('csrf_token', '<?= \App\Helpers\Security::generateCsrfToken() ?>');
 
     fetch('<?= BASE_PATH ?>/leads/enrichGoogle', {
@@ -303,11 +302,11 @@ function enrichGoogleLead(btn, index, name, city, district, force) {
             return;
         }
 
-        if (res.status === 'medium_confidence' && !force) {
+        if (res.status === 'medium_confidence') {
             const cand = res.candidate;
             const confirmMsg = `Muhtemel Google Places Eşleşmesi:\n\nİşletme: ${cand.display_name}\nAdres: ${cand.formatted_address}\n\nBu işletme bilgilerini doğrulamak ve detayları çekmek istiyor musunuz?`;
             if (confirm(confirmMsg)) {
-                enrichGoogleLead(btn, index, name, city, district, true);
+                confirmGoogleLead(btn, index, res.match_token, originalHtml);
             } else {
                 btn.innerHTML = originalHtml;
                 btn.disabled = false;
@@ -316,7 +315,50 @@ function enrichGoogleLead(btn, index, name, city, district, force) {
             return;
         }
 
-        // Apply enriched data
+        applyEnrichedLeadData(btn, index, res, originalHtml);
+    })
+    .catch(err => {
+        alert('İşlem sırasında bir hata oluştu.');
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+        if (window.lucide) lucide.createIcons();
+    });
+}
+
+function confirmGoogleLead(btn, index, matchToken, originalHtml) {
+    btn.innerHTML = '<i data-lucide="loader" class="spin"></i> Detaylar Alınıyor...';
+    btn.disabled = true;
+    if (window.lucide) lucide.createIcons();
+
+    const formData = new FormData();
+    formData.append('action', 'confirm');
+    formData.append('match_token', matchToken);
+    formData.append('csrf_token', '<?= \App\Helpers\Security::generateCsrfToken() ?>');
+
+    fetch('<?= BASE_PATH ?>/leads/enrichGoogle', {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (!res.success) {
+            alert(res.message || 'Google Place Details alınamadı.');
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+            if (window.lucide) lucide.createIcons();
+            return;
+        }
+        applyEnrichedLeadData(btn, index, res, originalHtml);
+    })
+    .catch(err => {
+        alert('Detay alma sırasında hata oluştu.');
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+        if (window.lucide) lucide.createIcons();
+    });
+}
+
+function applyEnrichedLeadData(btn, index, res, originalHtml) {
         if (res.phone) {
             const pSpan = document.getElementById('lead-phone-' + index);
             if (pSpan) pSpan.textContent = res.phone;
@@ -410,13 +452,6 @@ function enrichGoogleLead(btn, index, name, city, district, force) {
         btn.style.color = '#34d399';
         btn.disabled = true;
         if (window.lucide) lucide.createIcons();
-    })
-    .catch(err => {
-        alert('İşlem sırasında bir hata oluştu.');
-        btn.innerHTML = originalHtml;
-        btn.disabled = false;
-        if (window.lucide) lucide.createIcons();
-    });
 }
 
 function enrichLead(btn, index, url) {

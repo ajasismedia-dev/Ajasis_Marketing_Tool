@@ -25,7 +25,7 @@ class LeadNormalizer
         return $merged;
     }
 
-    private static function isSame($a, $b)
+    public static function isSame($a, $b)
     {
         // 1. Exact Website Domain Match
         $domainA = self::normalizeDomain($a['website'] ?? '');
@@ -71,19 +71,28 @@ class LeadNormalizer
         return preg_replace('/\s+/', ' ', trim($name));
     }
 
-    private static function merge($existing, $new)
+    public static function merge($existing, $new)
     {
         foreach ($new as $key => $value) {
             if (empty($existing[$key]) && !empty($value)) {
                 $existing[$key] = $value;
             }
         }
-        if ($existing['source'] !== $new['source'] && !empty($new['source'])) {
-             if (strpos($existing['source'], $new['source']) === false) {
-                 $existing['source'] .= ', ' . $new['source'];
-             }
-        }
+        $existing['source'] = self::mergeSources($existing['source'] ?? '', $new['source'] ?? '');
         return $existing;
+    }
+
+    public static function mergeSources($sourceA, $sourceB)
+    {
+        $partsA = !empty($sourceA) ? array_map('trim', preg_split('/[,+]/', (string)$sourceA)) : [];
+        $partsB = !empty($sourceB) ? array_map('trim', preg_split('/[,+]/', (string)$sourceB)) : [];
+        $all = [];
+        foreach (array_merge($partsA, $partsB) as $part) {
+            if ($part !== '' && !in_array($part, $all)) {
+                $all[] = $part;
+            }
+        }
+        return implode(' + ', $all);
     }
 
     public static function normalizeLead($lead)
