@@ -14,4 +14,6 @@
 Options -Indexes
 
 # Security: Hide PHP version
-Header always unset X-Powered-By
+<IfModule mod_headers.c>
+    Header always unset X-Powered-By
+</IfModule>

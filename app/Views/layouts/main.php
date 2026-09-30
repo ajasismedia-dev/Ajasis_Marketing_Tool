@@ -12,39 +12,42 @@
 
 <div class="app-container">
     <!-- Sidebar -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="app-sidebar">
         <div class="brand">
-            ajasis <span>marketing</span>
+            <span class="brand-text">ajasis <span>marketing</span></span>
+            <button type="button" class="toggle-sidebar-btn" id="toggle-sidebar-btn" title="Menüyü Daralt/Genişlet">
+                <i data-lucide="menu"></i>
+            </button>
         </div>
         <ul class="nav-menu">
             <li>
-                <a href="<?= BASE_PATH ?>/dashboard" class="nav-link <?= strpos($_SERVER['REQUEST_URI'] ?? '', '/dashboard') !== false ? 'active' : '' ?>">
-                    <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
-                    Dashboard
+                <a href="<?= BASE_PATH ?>/dashboard" class="nav-link <?= strpos($_SERVER['REQUEST_URI'] ?? '', '/dashboard') !== false ? 'active' : '' ?>" title="Dashboard">
+                    <i data-lucide="layout-dashboard"></i>
+                    <span>Dashboard</span>
                 </a>
             </li>
             <li>
-                <a href="<?= BASE_PATH ?>/leads" class="nav-link <?= strpos($_SERVER['REQUEST_URI'] ?? '', '/leads') !== false ? 'active' : '' ?>">
-                    <i data-lucide="search" class="w-5 h-5"></i>
-                    Firma Bul
+                <a href="<?= BASE_PATH ?>/leads" class="nav-link <?= strpos($_SERVER['REQUEST_URI'] ?? '', '/leads') !== false ? 'active' : '' ?>" title="Firma Bul">
+                    <i data-lucide="search"></i>
+                    <span>Firma Bul</span>
                 </a>
             </li>
             <li>
-                <a href="<?= BASE_PATH ?>/companies" class="nav-link <?= strpos($_SERVER['REQUEST_URI'] ?? '', '/companies') !== false ? 'active' : '' ?>">
-                    <i data-lucide="building-2" class="w-5 h-5"></i>
-                    Firmalar
+                <a href="<?= BASE_PATH ?>/companies" class="nav-link <?= strpos($_SERVER['REQUEST_URI'] ?? '', '/companies') !== false ? 'active' : '' ?>" title="Firmalar">
+                    <i data-lucide="building-2"></i>
+                    <span>Firmalar</span>
                 </a>
             </li>
             <li>
-                <a href="<?= BASE_PATH ?>/history" class="nav-link <?= strpos($_SERVER['REQUEST_URI'] ?? '', '/history') !== false ? 'active' : '' ?>">
-                    <i data-lucide="history" class="w-5 h-5"></i>
-                    İletişim Geçmişi
+                <a href="<?= BASE_PATH ?>/history" class="nav-link <?= strpos($_SERVER['REQUEST_URI'] ?? '', '/history') !== false ? 'active' : '' ?>" title="İletişim Geçmişi">
+                    <i data-lucide="history"></i>
+                    <span>İletişim Geçmişi</span>
                 </a>
             </li>
             <li style="margin-top: auto;">
-                <a href="<?= BASE_PATH ?>/settings" class="nav-link <?= strpos($_SERVER['REQUEST_URI'] ?? '', '/settings') !== false ? 'active' : '' ?>">
-                    <i data-lucide="settings" class="w-5 h-5"></i>
-                    Ayarlar
+                <a href="<?= BASE_PATH ?>/settings" class="nav-link <?= strpos($_SERVER['REQUEST_URI'] ?? '', '/settings') !== false ? 'active' : '' ?>" title="Ayarlar">
+                    <i data-lucide="settings"></i>
+                    <span>Ayarlar</span>
                 </a>
             </li>
         </ul>
@@ -56,9 +59,12 @@
             <h1><?= \App\Helpers\Security::escape($page_title ?? 'Dashboard') ?></h1>
             <div class="user-info">
                 <span><?= \App\Helpers\Security::escape($_SESSION['user_name'] ?? '') ?></span>
-                <a href="<?= BASE_PATH ?>/login/logout" class="logout-btn">
-                    <i data-lucide="log-out" class="w-5 h-5"></i> Çıkış
-                </a>
+                <form action="<?= BASE_PATH ?>/login/logout" method="POST" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="<?= \App\Helpers\Security::generateCsrfToken() ?>">
+                    <button type="submit" class="logout-btn" style="background:none; border:none; cursor:pointer; display:flex; align-items:center; gap:0.5rem; font-family:inherit;">
+                        <i data-lucide="log-out"></i> Çıkış
+                    </button>
+                </form>
             </div>
         </header>
         
@@ -69,7 +75,25 @@
 </div>
 
 <script>
+    // Initialize Lucide Icons
     lucide.createIcons();
+
+    // Sidebar Toggle Logic
+    document.addEventListener('DOMContentLoaded', () => {
+        const sidebar = document.getElementById('app-sidebar');
+        const toggleBtn = document.getElementById('toggle-sidebar-btn');
+        
+        // Restore state from localStorage
+        const isCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
+        if (isCollapsed) {
+            sidebar.classList.add('collapsed');
+        }
+
+        toggleBtn.addEventListener('click', () => {
+            sidebar.classList.toggle('collapsed');
+            localStorage.setItem('sidebar_collapsed', sidebar.classList.contains('collapsed'));
+        });
+    });
 </script>
 </body>
 </html>

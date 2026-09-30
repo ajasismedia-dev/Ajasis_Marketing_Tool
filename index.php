@@ -3,6 +3,7 @@
 session_start([
     'cookie_httponly' => true,
     'cookie_secure' => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on',
+    'cookie_samesite' => 'Lax',
     'use_strict_mode' => true,
 ]);
 
