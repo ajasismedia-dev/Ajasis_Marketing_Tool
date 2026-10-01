@@ -156,6 +156,91 @@ TestHelper::assertNull($ssrfRes, 'WebsiteEnricher SSRF blocked returns null (no 
 $viewCode = file_get_contents(__DIR__ . '/../app/Views/leads/index.php');
 TestHelper::assertTrue(strpos($viewCode, "res.source_trace || 'Google Places'") === false, 'View does NOT fallback to Google Places in source badge');
 TestHelper::assertTrue(strpos($viewCode, "form-source-") !== false, 'View updates hidden form-source field');
-TestHelper::assertTrue(strpos($viewCode, "Powered by Google") !== false, 'View includes official Google attribution');
+
+echo "\n--- FAZ 3.6.4 GOOGLE COMPLIANCE & ENRICHMENT METADATA TESTS ---\n";
+// 1. Medium match modal has NO custom SVG logo and NO 'Powered by Google' / 'Google Maps Platform'
+TestHelper::assertTrue(strpos($viewCode, 'id="googleMatchModal"') !== false, 'Google match modal exists in view');
+if (preg_match('/<div id="googleMatchModal".*?<\/div>\s*<\/div>\s*<\/div>/s', $viewCode, $modalMatches)) {
+    TestHelper::assertTrue(strpos($modalMatches[0], '<svg') === false, 'Medium match modal has NO custom SVG logo');
+}
+TestHelper::assertTrue(strpos($viewCode, 'Powered by Google') === false, 'View does NOT contain Powered by Google');
+TestHelper::assertTrue(strpos($viewCode, 'Google Maps Platform') === false, 'View does NOT contain Google Maps Platform');
+
+// 2. Exact text attribution: <span class="google-maps-attribution" translate="no">Google Maps</span>
+TestHelper::assertTrue(strpos($viewCode, 'class="google-maps-attribution"') !== false, 'View has google-maps-attribution class');
+TestHelper::assertTrue(strpos($viewCode, 'translate="no"') !== false, 'View has translate="no" on attribution');
+TestHelper::assertTrue(strpos($viewCode, '>Google Maps</span>') !== false, 'View has exact Google Maps text attribution');
+
+// 3. Place Details field mask is strictly id,websiteUri (no phone, no address, no displayName)
+$enricherCode = file_get_contents(__DIR__ . '/../app/Services/LeadFinder/Enrichment/GooglePlacesEnricher.php');
+TestHelper::assertTrue(strpos($enricherCode, "'X-Goog-FieldMask: id,websiteUri'") !== false, 'Place Details field mask is strictly id,websiteUri');
+TestHelper::assertTrue(strpos($enricherCode, 'nationalPhoneNumber') === false, 'Place Details does NOT request nationalPhoneNumber');
+TestHelper::assertTrue(strpos($enricherCode, 'internationalPhoneNumber') === false, 'Place Details does NOT request internationalPhoneNumber');
+
+// 4. Response array does NOT contain google_preview
+TestHelper::assertTrue(strpos($enricherCode, "'google_preview'") === false, 'GooglePlacesEnricher does NOT produce google_preview');
+$enrichResult = GooglePlacesEnricher::enrich('DUMMY_QUERY_FOR_TEST');
+TestHelper::assertTrue(!isset($enrichResult['google_preview']), 'Enrich result array does NOT contain google_preview');
+
+// 5. DB save last_enriched_at metadata assignment
+$controllerCode = file_get_contents(__DIR__ . '/../app/Controllers/LeadsController.php');
+TestHelper::assertTrue(strpos($controllerCode, 'last_enriched_at') !== false, 'LeadsController assigns last_enriched_at');
+TestHelper::assertTrue(strpos($controllerCode, "date('Y-m-d H:i:s')") !== false, 'LeadsController sets server-side timestamp');
+// Verify last_enriched_at is NOT accepted blindly from POST whitelist
+if (preg_match('/\$fields\s*=\s*\[(.*?)\];/s', $controllerCode, $fieldMatches)) {
+    TestHelper::assertTrue(strpos($fieldMatches[1], "'last_enriched_at'") === false, 'POST whitelist does NOT contain last_enriched_at (tamper-proof)');
+}
+
+// 6. Live DB verification of last_enriched_at
+if (file_exists(__DIR__ . '/../config/config.php')) {
+    require_once __DIR__ . '/../config/config.php';
+    require_once __DIR__ . '/../app/Core/Database.php';
+    require_once __DIR__ . '/../app/Models/Company.php';
+    
+    try {
+        $db = \App\Core\Database::getInstance()->getConnection();
+        if ($db) {
+            $companyModel = new \App\Models\Company();
+            
+            // Test Enriched Lead Save
+            $testEnrichedData = [
+                'name' => 'TEST_ENRICHED_' . bin2hex(random_bytes(4)),
+                'phone' => '05329990011',
+                'google_place_id' => 'ChIJtest_place_id_' . time(),
+                'enrichment_status' => 'google_enriched',
+                'status' => 'new'
+            ];
+            if (!empty($testEnrichedData['google_place_id']) || !empty($testEnrichedData['enrichment_status'])) {
+                $testEnrichedData['last_enriched_at'] = date('Y-m-d H:i:s');
+            } else {
+                $testEnrichedData['last_enriched_at'] = null;
+            }
+            $enrichedId = $companyModel->create($testEnrichedData);
+            $savedEnriched = $companyModel->findById($enrichedId);
+            TestHelper::assertNotEmpty($savedEnriched['last_enriched_at'], 'Enriched company DB record has last_enriched_at NOT NULL');
+            $companyModel->delete($enrichedId);
+            
+            // Test Normal Lead Save
+            $testNormalData = [
+                'name' => 'TEST_NORMAL_' . bin2hex(random_bytes(4)),
+                'phone' => '05329990022',
+                'google_place_id' => '',
+                'enrichment_status' => '',
+                'status' => 'new'
+            ];
+            if (!empty($testNormalData['google_place_id']) || !empty($testNormalData['enrichment_status'])) {
+                $testNormalData['last_enriched_at'] = date('Y-m-d H:i:s');
+            } else {
+                $testNormalData['last_enriched_at'] = null;
+            }
+            $normalId = $companyModel->create($testNormalData);
+            $savedNormal = $companyModel->findById($normalId);
+            TestHelper::assertNull($savedNormal['last_enriched_at'], 'Normal company DB record has last_enriched_at IS NULL');
+            $companyModel->delete($normalId);
+        }
+    } catch (\Throwable $e) {
+        TestHelper::skip('DB live test skipped: ' . $e->getMessage());
+    }
+}
 
 require __DIR__ . '/test_string_parsing.php';

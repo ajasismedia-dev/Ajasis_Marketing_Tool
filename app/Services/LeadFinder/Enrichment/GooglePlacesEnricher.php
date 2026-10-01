@@ -228,21 +228,6 @@ class GooglePlacesEnricher
 
         $placeDetails = $detailsResult['data'];
         $websiteUri = $placeDetails['websiteUri'] ?? '';
-        $candName = $placeDetails['displayName']['text'] ?? '';
-        $candAddress = $placeDetails['formattedAddress'] ?? '';
-
-        // Transient Google preview for immediate UI attribution only (never saved to CRM)
-        $googlePreview = [
-            'display_name' => $candName,
-            'phone' => $placeDetails['nationalPhoneNumber'] ?? $placeDetails['internationalPhoneNumber'] ?? '',
-            'address' => $candAddress,
-            'attribution' => 'Google Maps'
-        ];
-
-        $candidateInfo = [
-            'display_name' => $candName,
-            'formatted_address' => $candAddress
-        ];
 
         // 1. If Google has NO websiteUri
         if (empty($websiteUri)) {
@@ -253,7 +238,6 @@ class GooglePlacesEnricher
                 'confidence' => $confidence,
                 'confidence_level' => $confidence,
                 'confidence_score' => $score,
-                'candidate' => $candidateInfo,
                 'google_place_id' => $placeId,
                 'website' => '',
                 'phone' => '',
@@ -264,7 +248,6 @@ class GooglePlacesEnricher
                 'linkedin' => '',
                 'youtube' => '',
                 'source_trace' => '',
-                'google_preview' => $googlePreview,
                 'message' => 'İşletme eşleşti ancak web sitesi bulunamadı. Google içeriği CRM\'e kaydedilmedi.',
                 'api_stats' => [
                     'text_search_calls' => $textSearchCount,
@@ -308,7 +291,6 @@ class GooglePlacesEnricher
             'confidence' => $confidence,
             'confidence_level' => $confidence,
             'confidence_score' => $score,
-            'candidate' => $candidateInfo,
             'google_place_id' => $placeId,
             'website' => $finalWebsiteUrl,
             'phone' => $phone,
@@ -320,7 +302,6 @@ class GooglePlacesEnricher
             'youtube' => $youtube,
             'source_trace' => $sourceTrace,
             'website_data' => $webData ?: [],
-            'google_preview' => $googlePreview,
             'api_stats' => [
                 'text_search_calls' => $textSearchCount,
                 'place_details_calls' => 1,
@@ -388,7 +369,7 @@ class GooglePlacesEnricher
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Content-Type: application/json',
             'X-Goog-Api-Key: ' . $apiKey,
-            'X-Goog-FieldMask: id,displayName,formattedAddress,nationalPhoneNumber,internationalPhoneNumber,websiteUri,businessStatus'
+            'X-Goog-FieldMask: id,websiteUri'
         ]);
         curl_setopt($ch, CURLOPT_USERAGENT, 'AjasisMarketingTool/1.0');
 

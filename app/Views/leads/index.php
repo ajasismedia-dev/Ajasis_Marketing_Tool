@@ -246,25 +246,15 @@ $statusLabels = [
                 <div id="gmCandidateAddress" style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 3px;"></div>
             </div>
             <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 0.75rem; margin-top: 0.75rem;">
-                <span style="font-size: 0.8rem; color: var(--text-secondary);">Güven Skoru:</span>
-                <span id="gmCandidateScore" class="badge" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; font-weight: 600;"></span>
+                <div>
+                    <span style="font-size: 0.8rem; color: var(--text-secondary);">Güven Skoru: </span>
+                    <span id="gmCandidateScore" class="badge" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; font-weight: 600;"></span>
+                </div>
+                <span class="google-maps-attribution" translate="no" style="font-size: 0.75rem; color: #94a3b8; white-space: nowrap;">Google Maps</span>
             </div>
         </div>
 
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; font-size: 0.75rem; color: #94a3b8; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 0.75rem;">
-            <div style="display: inline-flex; align-items: center; gap: 6px;">
-                <svg width="16" height="16" viewBox="0 0 24 24" style="flex-shrink: 0;" aria-label="Google">
-                    <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3.03h3.88c2.27-2.09 3.665-5.17 3.665-9.12z"/>
-                    <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.03c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.13C3.28 21.42 7.34 24 12 24z"/>
-                    <path fill="#FBBC05" d="M5.28 14.29c-.25-.72-.38-1.49-.38-2.29s.13-1.57.38-2.29V6.57H1.25C.45 8.16 0 9.99 0 12s.45 3.84 1.25 5.43l4.03-3.14z"/>
-                    <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.28 2.58 1.25 6.57l4.03 3.14c.95-2.83 3.6-4.96 6.72-4.96z"/>
-                </svg>
-                <span style="font-weight: 500; letter-spacing: 0.2px; color: #cbd5e1;">Powered by Google</span>
-            </div>
-            <span style="font-size: 0.7rem; color: #64748b;">Google Maps Platform</span>
-        </div>
-
-        <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+        <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
             <button type="button" id="gmModalCancel" class="btn" style="background: rgba(255,255,255,0.1); color: #fff;">İptal</button>
             <button type="button" id="gmModalConfirm" class="btn btn-primary" style="background: #3b82f6; border-color: #3b82f6;">Eşleşmeyi Onayla</button>
         </div>

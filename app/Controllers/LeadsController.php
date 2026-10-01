@@ -168,6 +168,13 @@ class LeadsController extends Controller
             exit;
         }
 
+        // Server-side assignment for last_enriched_at metadata (tamper-proof, ignored from client)
+        if (!empty($data['google_place_id']) || !empty($data['enrichment_status'])) {
+            $data['last_enriched_at'] = date('Y-m-d H:i:s');
+        } else {
+            $data['last_enriched_at'] = null;
+        }
+
         // Save
         $data['status'] = 'new';
         $newId = $companyModel->create($data);
