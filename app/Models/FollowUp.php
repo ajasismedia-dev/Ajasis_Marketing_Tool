@@ -54,7 +54,7 @@ class FollowUp
         $sql = "SELECT f.*, comp.name AS company_name, comp.phone AS company_phone, comp.status AS company_status
                 FROM follow_ups f
                 INNER JOIN companies comp ON f.company_id = comp.id
-                WHERE f.status = 'pending' AND f.due_at < NOW()
+                WHERE f.status = 'pending' AND f.due_at < CURDATE()
                 ORDER BY f.due_at ASC";
         $stmt = $this->db->query($sql);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -65,12 +65,13 @@ class FollowUp
         $sql = "SELECT f.*, comp.name AS company_name, comp.phone AS company_phone, comp.status AS company_status
                 FROM follow_ups f
                 INNER JOIN companies comp ON f.company_id = comp.id
-                WHERE f.status = 'pending' AND f.due_at >= NOW()
+                WHERE f.status = 'pending' AND f.due_at >= CURDATE() + INTERVAL 1 DAY
                 ORDER BY f.due_at ASC
                 LIMIT " . (int)$limit;
         $stmt = $this->db->query($sql);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
+
 
     public function findById($id)
     {
@@ -135,7 +136,8 @@ class FollowUp
 
     public function countOverdue()
     {
-        $sql = "SELECT COUNT(*) FROM follow_ups WHERE status = 'pending' AND due_at < NOW()";
+        $sql = "SELECT COUNT(*) FROM follow_ups WHERE status = 'pending' AND due_at < CURDATE()";
         return (int)$this->db->query($sql)->fetchColumn();
     }
+
 }

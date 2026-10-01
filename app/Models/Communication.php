@@ -209,15 +209,18 @@ class Communication
 
     public function getRepliedCount()
     {
-        $sql = "SELECT COUNT(*) FROM communications 
-                WHERE outcome IN ('replied', 'interested', 'proposal_requested')";
+        $sql = "SELECT COUNT(DISTINCT company_id) FROM communications 
+                WHERE outcome IN ('replied', 'interested', 'proposal_requested')
+                AND direction IN ('outbound', 'inbound')";
         return (int)$this->db->query($sql)->fetchColumn();
     }
 
     public function getProposalsCount()
     {
-        $sql = "SELECT COUNT(*) FROM communications 
-                WHERE outcome = 'proposal_sent'";
+        $sql = "SELECT COUNT(DISTINCT company_id) FROM communications 
+                WHERE outcome = 'proposal_sent'
+                AND direction IN ('outbound', 'inbound')";
         return (int)$this->db->query($sql)->fetchColumn();
     }
+
 }

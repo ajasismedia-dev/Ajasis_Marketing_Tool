@@ -18,3 +18,9 @@ define('DB_CHARSET', 'utf8mb4');
 // Google Places API (New)
 define('GOOGLE_PLACES_API_KEY', '');
 define('GOOGLE_PLACES_ENABLED', true);
+
+// Timezone Configuration
+define('APP_TIMEZONE', 'Europe/Istanbul');
+define('DB_TIMEZONE', '+03:00');
+date_default_timezone_set(APP_TIMEZONE);
+

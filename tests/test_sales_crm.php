@@ -28,6 +28,11 @@ TestHelper::assertEqual('customer', SalesCrmService::calculateNextStatus('custom
 TestHelper::assertEqual('customer', SalesCrmService::calculateNextStatus('customer', 'outbound', 'not_interested'), 'customer does NOT downgrade to negative');
 TestHelper::assertEqual('negative', SalesCrmService::calculateNextStatus('contacted', 'outbound', 'not_interested'), 'contacted + not_interested -> negative');
 TestHelper::assertEqual('negative', SalesCrmService::calculateNextStatus('new', 'outbound', 'not_interested'), 'new + not_interested -> negative');
+TestHelper::assertEqual('new', SalesCrmService::calculateNextStatus('new', 'internal', 'sent'), 'new + internal does NOT change status');
+TestHelper::assertEqual('contacted', SalesCrmService::calculateNextStatus('contacted', 'internal', 'proposal_sent'), 'contacted + internal does NOT change status');
+TestHelper::assertEqual('replied', SalesCrmService::calculateNextStatus('replied', 'internal', 'customer'), 'replied + internal does NOT change status');
+TestHelper::assertEqual('proposal', SalesCrmService::calculateNextStatus('proposal', 'internal', 'not_interested'), 'proposal + internal does NOT change status');
+
 
 echo "\n--- SALES CRM LIVE DATABASE END-TO-END SCENARIO ---\n";
 
@@ -173,7 +178,215 @@ try {
 
         $remainingFus = $fuModel->getByCompany($cid);
         TestHelper::assertEqual(0, count($remainingFus), 'Cascade deleted all associated follow-ups');
+
+        // 12. Historical timestamp MIN/MAX & internal note integrity
+        echo "\n--- FAZ 4.1 DATA INTEGRITY & TIMESTAMPS TESTS ---\n";
+        $cidH = $compModel->create([
+            'name' => 'HIST_TEST_' . bin2hex(random_bytes(4)),
+            'phone' => '05329998877',
+            'city' => 'Konya',
+            'status' => 'new'
+        ]);
+
+        $tOct5 = '2026-10-05 15:00:00';
+        SalesCrmService::logCommunication($cidH, [
+            'type' => 'phone',
+            'direction' => 'outbound',
+            'contacted_at' => $tOct5
+        ]);
+        $compH = $compModel->findById($cidH);
+        TestHelper::assertEqual($tOct5, $compH['first_contact_at'], 'First contact at tOct5');
+        TestHelper::assertEqual($tOct5, $compH['last_contact_at'], 'Last contact at tOct5');
+
+        // Past contact at Oct 1 10:00: first_contact_at must update to Oct 1, last_contact_at must STAY Oct 5 (NO ROLLBACK)
+        $tOct1 = '2026-10-01 10:00:00';
+        SalesCrmService::logCommunication($cidH, [
+            'type' => 'phone',
+            'direction' => 'inbound',
+            'contacted_at' => $tOct1
+        ]);
+        $compH = $compModel->findById($cidH);
+        TestHelper::assertEqual($tOct1, $compH['first_contact_at'], 'Past contact updates first_contact_at to earlier date (MIN)');
+        TestHelper::assertEqual($tOct5, $compH['last_contact_at'], 'Past contact does NOT downgrade last_contact_at (MAX preserved)');
+
+        // Later contact at Oct 6 12:00: first_contact_at must STAY Oct 1, last_contact_at must update to Oct 6
+        $tOct6 = '2026-10-06 12:00:00';
+        SalesCrmService::logCommunication($cidH, [
+            'type' => 'whatsapp',
+            'direction' => 'outbound',
+            'contacted_at' => $tOct6
+        ]);
+        $compH = $compModel->findById($cidH);
+        TestHelper::assertEqual($tOct1, $compH['first_contact_at'], 'Later contact preserves first_contact_at');
+        TestHelper::assertEqual($tOct6, $compH['last_contact_at'], 'Later contact updates last_contact_at');
+
+        // Internal note: channel='note', should force direction='internal', outcome=null, timestamps untouched
+        $tOct10 = '2026-10-10 10:00:00';
+        $resNoteH = SalesCrmService::logCommunication($cidH, [
+            'type' => 'note',
+            'direction' => 'outbound',
+            'outcome' => 'customer',
+            'subject' => 'Note check',
+            'message' => 'Internal note integrity check',
+            'contacted_at' => $tOct10
+        ]);
+        TestHelper::assertTrue($resNoteH['success'], 'Note logged');
+        $loggedNote = $commModel->findById($resNoteH['communication_id']);
+        TestHelper::assertEqual('internal', $loggedNote['direction'], 'type=note forced direction=internal');
+        TestHelper::assertNull($loggedNote['outcome'], 'direction=internal forced outcome=null');
+
+        $compH = $compModel->findById($cidH);
+        TestHelper::assertEqual($tOct1, $compH['first_contact_at'], 'Internal note does NOT modify first_contact_at');
+        TestHelper::assertEqual($tOct6, $compH['last_contact_at'], 'Internal note does NOT modify last_contact_at');
+
+        $compModel->delete($cidH);
+
+        // 13. Follow-up idempotency tests
+        echo "\n--- FAZ 4.1 FOLLOW-UP IDEMPOTENCY TESTS ---\n";
+        $cidF = $compModel->create([
+            'name' => 'FU_IDEMP_TEST_' . bin2hex(random_bytes(4)),
+            'phone' => '05321113355',
+            'city' => 'Konya',
+            'status' => 'new'
+        ]);
+
+        $fu1Id = $fuModel->create([
+            'company_id' => $cidF,
+            'title' => 'Complete Idempotency Test',
+            'due_at' => date('Y-m-d 15:00:00'),
+            'status' => 'pending'
+        ]);
+
+        // First completion: changed=true
+        $compRes1 = SalesCrmService::completeFollowUp($fu1Id);
+        TestHelper::assertTrue($compRes1['success'], 'First completeFollowUp succeeds');
+        TestHelper::assertTrue($compRes1['changed'], 'First completeFollowUp changed=true');
+        $commsAfterFirst = $commModel->getByCompany($cidF);
+        $countAfterFirst = count($commsAfterFirst);
+        TestHelper::assertEqual(1, $countAfterFirst, '1 timeline note added on complete');
+
+        // Second completion (idempotent call): changed=false, no extra timeline note
+        $compRes2 = SalesCrmService::completeFollowUp($fu1Id);
+        TestHelper::assertTrue($compRes2['success'], 'Second completeFollowUp succeeds (idempotent)');
+        TestHelper::assertFalse($compRes2['changed'], 'Second completeFollowUp changed=false (no-op)');
+        $commsAfterSecond = $commModel->getByCompany($cidF);
+        TestHelper::assertEqual($countAfterFirst, count($commsAfterSecond), 'Zero additional timeline notes on idempotent completion');
+
+        // Try to cancel already completed follow-up: must reject
+        $cancelCompleted = SalesCrmService::cancelFollowUp($fu1Id);
+        TestHelper::assertFalse($cancelCompleted['success'], 'Cannot cancel an already completed follow-up');
+
+        // Test cancelFollowUp idempotency
+        $fu2Id = $fuModel->create([
+            'company_id' => $cidF,
+            'title' => 'Cancel Idempotency Test',
+            'due_at' => date('Y-m-d 16:00:00'),
+            'status' => 'pending'
+        ]);
+
+        // First cancellation: changed=true
+        $cancRes1 = SalesCrmService::cancelFollowUp($fu2Id);
+        TestHelper::assertTrue($cancRes1['success'], 'First cancelFollowUp succeeds');
+        TestHelper::assertTrue($cancRes1['changed'], 'First cancelFollowUp changed=true');
+        $commsAfterCanc = $commModel->getByCompany($cidF);
+        $countAfterCanc = count($commsAfterCanc);
+        TestHelper::assertEqual($countAfterFirst + 1, $countAfterCanc, '1 timeline note added on cancellation');
+
+        // Second cancellation (idempotent call): changed=false, no extra timeline note
+        $cancRes2 = SalesCrmService::cancelFollowUp($fu2Id);
+        TestHelper::assertTrue($cancRes2['success'], 'Second cancelFollowUp succeeds (idempotent)');
+        TestHelper::assertFalse($cancRes2['changed'], 'Second cancelFollowUp changed=false (no-op)');
+        $commsAfterCanc2 = $commModel->getByCompany($cidF);
+        TestHelper::assertEqual($countAfterCanc, count($commsAfterCanc2), 'Zero additional timeline notes on idempotent cancellation');
+
+        // Try to complete already cancelled follow-up: must reject
+        $completeCancelled = SalesCrmService::completeFollowUp($fu2Id);
+        TestHelper::assertFalse($completeCancelled['success'], 'Cannot complete an already cancelled follow-up');
+
+        $compModel->delete($cidF);
+
+        // 14. Non-overlapping follow-up partitions tests
+        echo "\n--- FAZ 4.1 NON-OVERLAPPING FOLLOW-UP PARTITIONS TESTS ---\n";
+        $cidP = $compModel->create([
+            'name' => 'PARTITION_TEST_' . bin2hex(random_bytes(4)),
+            'phone' => '05327778899',
+            'city' => 'Konya',
+            'status' => 'new'
+        ]);
+
+        $fuPastId = $fuModel->create([
+            'company_id' => $cidP,
+            'title' => 'Past Followup',
+            'due_at' => date('Y-m-d 10:00:00', strtotime('-2 days')),
+            'status' => 'pending'
+        ]);
+
+        $fuTodayId = $fuModel->create([
+            'company_id' => $cidP,
+            'title' => 'Today Followup',
+            'due_at' => date('Y-m-d 14:00:00'),
+            'status' => 'pending'
+        ]);
+
+        $fuFutureId = $fuModel->create([
+            'company_id' => $cidP,
+            'title' => 'Future Followup',
+            'due_at' => date('Y-m-d 11:00:00', strtotime('+2 days')),
+            'status' => 'pending'
+        ]);
+
+        $overdueList = $fuModel->getOverdue();
+        $overdueIds = array_column($overdueList, 'id');
+        TestHelper::assertTrue(in_array($fuPastId, $overdueIds), 'Overdue list contains past item');
+        TestHelper::assertFalse(in_array($fuTodayId, $overdueIds), 'Overdue list does NOT contain today item (zero overlap)');
+        TestHelper::assertFalse(in_array($fuFutureId, $overdueIds), 'Overdue list does NOT contain future item (zero overlap)');
+
+        $todayList = $fuModel->getDueToday();
+        $todayIds = array_column($todayList, 'id');
+        TestHelper::assertTrue(in_array($fuTodayId, $todayIds), 'Today list contains today item');
+        TestHelper::assertFalse(in_array($fuPastId, $todayIds), 'Today list does NOT contain past item (zero overlap)');
+        TestHelper::assertFalse(in_array($fuFutureId, $todayIds), 'Today list does NOT contain future item (zero overlap)');
+
+        $upcomingList = $fuModel->getUpcoming(100);
+        $upcomingIds = array_column($upcomingList, 'id');
+        TestHelper::assertTrue(in_array($fuFutureId, $upcomingIds), 'Upcoming list contains future item');
+        TestHelper::assertFalse(in_array($fuPastId, $upcomingIds), 'Upcoming list does NOT contain past item (zero overlap)');
+        TestHelper::assertFalse(in_array($fuTodayId, $upcomingIds), 'Upcoming list does NOT contain today item (zero overlap)');
+
+        $compModel->delete($cidP);
+
+        // 15. Unique company counts in Communication tests
+        echo "\n--- FAZ 4.1 UNIQUE COMPANY COUNTS IN COMMUNICATION TESTS ---\n";
+        $cidKpi1 = $compModel->create(['name' => 'KPI_TEST_1_' . bin2hex(random_bytes(4)), 'phone' => '05320000001', 'status' => 'new']);
+        $cidKpi2 = $compModel->create(['name' => 'KPI_TEST_2_' . bin2hex(random_bytes(4)), 'phone' => '05320000002', 'status' => 'new']);
+
+        $beforeReplied = $commModel->getRepliedCount();
+        $beforeProposals = $commModel->getProposalsCount();
+
+        SalesCrmService::logCommunication($cidKpi1, ['type' => 'phone', 'direction' => 'inbound', 'outcome' => 'replied']);
+        SalesCrmService::logCommunication($cidKpi1, ['type' => 'whatsapp', 'direction' => 'outbound', 'outcome' => 'interested']);
+        SalesCrmService::logCommunication($cidKpi2, ['type' => 'email', 'direction' => 'inbound', 'outcome' => 'replied']);
+
+        SalesCrmService::logCommunication($cidKpi1, ['type' => 'email', 'direction' => 'outbound', 'outcome' => 'proposal_sent']);
+        SalesCrmService::logCommunication($cidKpi1, ['type' => 'phone', 'direction' => 'outbound', 'outcome' => 'proposal_sent']);
+
+        $afterReplied = $commModel->getRepliedCount();
+        $afterProposals = $commModel->getProposalsCount();
+
+        TestHelper::assertEqual($beforeReplied + 2, $afterReplied, 'getRepliedCount counts unique companies (DISTINCT company_id)');
+        TestHelper::assertEqual($beforeProposals + 1, $afterProposals, 'getProposalsCount counts unique companies (DISTINCT company_id)');
+
+        $compModel->delete($cidKpi1);
+        $compModel->delete($cidKpi2);
+
+        // 16. Timezone synchronization tests
+        echo "\n--- FAZ 4.1 TIMEZONE SYNCHRONIZATION TESTS ---\n";
+        $nowPhp = date('Y-m-d H:i:s');
+        $nowDb = $db->query("SELECT NOW()")->fetchColumn();
+        $diff = abs(strtotime($nowPhp) - strtotime($nowDb));
+        TestHelper::assertTrue($diff <= 2, "PHP date ($nowPhp) and DB NOW() ($nowDb) match within 2 seconds (diff: {$diff}s)");
     }
+
 } catch (\Throwable $e) {
     TestHelper::skip('Sales CRM DB test exception: ' . $e->getMessage());
 }

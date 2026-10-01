@@ -34,6 +34,11 @@ class SalesCrmService
      */
     public static function calculateNextStatus($currentStatus, $direction, $outcome)
     {
+        // Internal events (notes, follow-up updates, system updates) NEVER change pipeline status
+        if ($direction === 'internal') {
+            return $currentStatus;
+        }
+
         $statusRanks = [
             'new' => 1,
             'contacted' => 2,
@@ -106,7 +111,19 @@ class SalesCrmService
             // Sanitize & validate communication fields
             $type = in_array($commData['type'] ?? '', self::$validTypes) ? $commData['type'] : 'other';
             $direction = in_array($commData['direction'] ?? '', self::$validDirections) ? $commData['direction'] : 'outbound';
-            $outcome = (!empty($commData['outcome']) && in_array($commData['outcome'], self::$validOutcomes)) ? $commData['outcome'] : null;
+
+            // Internal note integrity: note type forces direction to internal
+            if ($type === 'note') {
+                $direction = 'internal';
+            }
+
+            // Internal direction forces outcome to null
+            if ($direction === 'internal') {
+                $outcome = null;
+            } else {
+                $outcome = (!empty($commData['outcome']) && in_array($commData['outcome'], self::$validOutcomes)) ? $commData['outcome'] : null;
+            }
+
             $subject = trim($commData['subject'] ?? '');
             $message = trim($commData['message'] ?? '');
             $contactedAt = !empty($commData['contacted_at']) ? $commData['contacted_at'] : date('Y-m-d H:i:s');
@@ -155,11 +172,19 @@ class SalesCrmService
             ];
 
             // Only outbound and inbound communications update contact timestamps
+            // Internal direction never touches contact timestamps
             if (in_array($direction, ['outbound', 'inbound'])) {
-                if (empty($company['first_contact_at'])) {
-                    $updateCompanyData['first_contact_at'] = $contactedAt;
+                $cTime = strtotime($contactedAt);
+                $currFirst = !empty($company['first_contact_at']) ? strtotime($company['first_contact_at']) : null;
+                $currLast = !empty($company['last_contact_at']) ? strtotime($company['last_contact_at']) : null;
+
+                if ($currFirst === null || $cTime < $currFirst) {
+                    $updateCompanyData['first_contact_at'] = date('Y-m-d H:i:s', $cTime);
                 }
-                $updateCompanyData['last_contact_at'] = $contactedAt;
+
+                if ($currLast === null || $cTime > $currLast) {
+                    $updateCompanyData['last_contact_at'] = date('Y-m-d H:i:s', $cTime);
+                }
             }
 
             $compModel = new Company();
@@ -239,21 +264,47 @@ class SalesCrmService
     }
 
     /**
-     * Complete a follow-up and log internal note to timeline
+     * Complete a follow-up and log internal note to timeline (idempotent with row locking)
      */
     public static function completeFollowUp($followUpId, ?int $userId = null)
     {
-        $fuModel = new FollowUp();
-        $fu = $fuModel->findById($followUpId);
-        if (!$fu) {
-            return ['success' => false, 'error' => 'Takip bulunamadı.'];
-        }
-
         $db = Database::getInstance()->getConnection();
         $db->beginTransaction();
 
         try {
-            $fuModel->complete($followUpId);
+            $stmt = $db->prepare("SELECT * FROM follow_ups WHERE id = :id FOR UPDATE");
+            $stmt->execute(['id' => (int)$followUpId]);
+            $fu = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$fu) {
+                $db->rollBack();
+                return ['success' => false, 'error' => 'Takip bulunamadı.'];
+            }
+
+            // Idempotent: already completed
+            if ($fu['status'] === 'completed') {
+                $db->rollBack();
+                return [
+                    'success' => true,
+                    'changed' => false,
+                    'message' => 'Zaten tamamlanmış.',
+                    'company_id' => (int)$fu['company_id']
+                ];
+            }
+
+            // Cannot complete a cancelled follow-up
+            if ($fu['status'] === 'cancelled') {
+                $db->rollBack();
+                return [
+                    'success' => false,
+                    'error' => 'İptal edilmiş bir takip tamamlanamaz.',
+                    'company_id' => (int)$fu['company_id']
+                ];
+            }
+
+            // Status is pending: complete it
+            $updateStmt = $db->prepare("UPDATE follow_ups SET status = 'completed', completed_at = NOW() WHERE id = :id");
+            $updateStmt->execute(['id' => (int)$followUpId]);
 
             // Log internal note
             $commModel = new Communication();
@@ -269,10 +320,83 @@ class SalesCrmService
             ]);
 
             $db->commit();
-            return ['success' => true, 'company_id' => $fu['company_id']];
+            return [
+                'success' => true,
+                'changed' => true,
+                'company_id' => (int)$fu['company_id']
+            ];
+        } catch (Exception $e) {
+            $db->rollBack();
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Cancel a follow-up and log internal note to timeline (idempotent with row locking)
+     */
+    public static function cancelFollowUp($followUpId, ?int $userId = null)
+    {
+        $db = Database::getInstance()->getConnection();
+        $db->beginTransaction();
+
+        try {
+            $stmt = $db->prepare("SELECT * FROM follow_ups WHERE id = :id FOR UPDATE");
+            $stmt->execute(['id' => (int)$followUpId]);
+            $fu = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$fu) {
+                $db->rollBack();
+                return ['success' => false, 'error' => 'Takip bulunamadı.'];
+            }
+
+            // Idempotent: already cancelled
+            if ($fu['status'] === 'cancelled') {
+                $db->rollBack();
+                return [
+                    'success' => true,
+                    'changed' => false,
+                    'message' => 'Zaten iptal edilmiş.',
+                    'company_id' => (int)$fu['company_id']
+                ];
+            }
+
+            // Cannot cancel a completed follow-up
+            if ($fu['status'] === 'completed') {
+                $db->rollBack();
+                return [
+                    'success' => false,
+                    'error' => 'Tamamlanmış bir takip iptal edilemez.',
+                    'company_id' => (int)$fu['company_id']
+                ];
+            }
+
+            // Status is pending: cancel it
+            $updateStmt = $db->prepare("UPDATE follow_ups SET status = 'cancelled' WHERE id = :id");
+            $updateStmt->execute(['id' => (int)$followUpId]);
+
+            // Log internal note
+            $commModel = new Communication();
+            $commModel->create([
+                'company_id' => (int)$fu['company_id'],
+                'type' => 'note',
+                'direction' => 'internal',
+                'subject' => 'Takip İptal Edildi',
+                'message' => "İptal Edilen Takip: " . $fu['title'] . (!empty($fu['notes']) ? " (Not: {$fu['notes']})" : ""),
+                'outcome' => null,
+                'contacted_at' => date('Y-m-d H:i:s'),
+                'created_by' => $userId
+            ]);
+
+            $db->commit();
+            return [
+                'success' => true,
+                'changed' => true,
+                'company_id' => (int)$fu['company_id']
+            ];
         } catch (Exception $e) {
             $db->rollBack();
             return ['success' => false, 'error' => $e->getMessage()];
         }
     }
 }
+

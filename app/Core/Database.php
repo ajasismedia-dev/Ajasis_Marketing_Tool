@@ -21,6 +21,8 @@ class Database
 
         try {
             $this->pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
+            $tz = defined('DB_TIMEZONE') ? DB_TIMEZONE : '+03:00';
+            $this->pdo->exec("SET time_zone = '{$tz}'");
         } catch (PDOException $e) {
             if (ENVIRONMENT === 'development') {
                 die("Database connection failed: " . $e->getMessage());

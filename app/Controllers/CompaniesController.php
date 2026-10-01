@@ -172,17 +172,6 @@ class CompaniesController extends Controller
         $this->redirect('/companies');
     }
 
-    public function markContacted($id)
-    {
-        if (!is_numeric($id) || $_SERVER['REQUEST_METHOD'] !== 'POST') return $this->error404();
-        Security::checkCsrfToken($_POST['csrf_token'] ?? '');
-
-        $userId = Auth::user()['id'] ?? null;
-        \App\Services\CRM\SalesCrmService::updateCompanyStatus((int)$id, 'contacted', $userId);
-
-        $this->redirect('/companies/show/' . $id);
-    }
-
     private function extractFormData($postData)
     {
         return [

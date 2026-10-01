@@ -17,6 +17,9 @@ define('PUBLIC_DIR', ROOT_DIR . '/public');
 // Load configurations
 require_once CONFIG_DIR . '/config.php';
 
+// Set application timezone
+date_default_timezone_set(defined('APP_TIMEZONE') ? APP_TIMEZONE : 'Europe/Istanbul');
+
 // Enable error reporting based on environment
 if (ENVIRONMENT === 'development') {
     ini_set('display_errors', 1);

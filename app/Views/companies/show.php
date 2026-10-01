@@ -371,7 +371,7 @@ elseif (strlen($waTargetPhone) === 11 && str_starts_with($waTargetPhone, '0')) $
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
                 <div class="form-group" style="margin: 0;">
                     <label class="form-label">Kanal *</label>
-                    <select name="type" id="commTypeSelect" class="form-input" required>
+                    <select name="type" id="commTypeSelect" class="form-input" onchange="handleCommTypeChange()" required>
                         <option value="phone">Telefon</option>
                         <option value="whatsapp">WhatsApp</option>
                         <option value="email">E-posta</option>
@@ -384,7 +384,7 @@ elseif (strlen($waTargetPhone) === 11 && str_starts_with($waTargetPhone, '0')) $
                 </div>
                 <div class="form-group" style="margin: 0;">
                     <label class="form-label">Yön *</label>
-                    <select name="direction" class="form-input" required>
+                    <select name="direction" id="commDirectionSelect" class="form-input" required>
                         <option value="outbound">Giden (Outbound)</option>
                         <option value="inbound">Gelen (Inbound)</option>
                         <option value="internal">Dahili / Not (Internal)</option>
@@ -405,7 +405,7 @@ elseif (strlen($waTargetPhone) === 11 && str_starts_with($waTargetPhone, '0')) $
 
             <div class="form-group" style="margin-bottom: 1rem;">
                 <label class="form-label">Görüşme Sonucu</label>
-                <select name="outcome" class="form-input">
+                <select name="outcome" id="commOutcomeSelect" class="form-input">
                     <option value="">-- Sonuç Seçin --</option>
                     <option value="sent">Gönderildi / İletildi</option>
                     <option value="no_answer">Cevapsız / Ulaşılamadı</option>
@@ -597,14 +597,46 @@ elseif (strlen($waTargetPhone) === 11 && str_starts_with($waTargetPhone, '0')) $
 </div>
 
 <script>
+function handleCommTypeChange() {
+    const typeSelect = document.getElementById('commTypeSelect');
+    const dirSelect = document.getElementById('commDirectionSelect');
+    const outcomeSelect = document.getElementById('commOutcomeSelect');
+    if (!typeSelect || !dirSelect) return;
+
+    if (typeSelect.value === 'note') {
+        dirSelect.value = 'internal';
+        dirSelect.style.pointerEvents = 'none';
+        dirSelect.style.opacity = '0.7';
+        dirSelect.setAttribute('tabindex', '-1');
+        if (outcomeSelect) {
+            outcomeSelect.value = '';
+            outcomeSelect.style.pointerEvents = 'none';
+            outcomeSelect.style.opacity = '0.5';
+        }
+    } else {
+        dirSelect.style.pointerEvents = '';
+        dirSelect.style.opacity = '';
+        dirSelect.removeAttribute('tabindex');
+        if (dirSelect.value === 'internal') {
+            dirSelect.value = 'outbound';
+        }
+        if (outcomeSelect) {
+            outcomeSelect.style.pointerEvents = '';
+            outcomeSelect.style.opacity = '';
+        }
+    }
+}
+
 function openCommModal(defaultType) {
     if (defaultType) {
         const select = document.getElementById('commTypeSelect');
         if (select) select.value = defaultType;
     }
+    handleCommTypeChange();
     document.getElementById('commModal').style.display = 'flex';
     if (window.lucide) lucide.createIcons();
 }
+
 function closeCommModal() {
     document.getElementById('commModal').style.display = 'none';
 }

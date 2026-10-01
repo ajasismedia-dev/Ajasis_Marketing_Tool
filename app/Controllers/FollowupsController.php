@@ -51,10 +51,21 @@ class FollowupsController extends Controller
 
         $dueDate = trim($_POST['due_date'] ?? date('Y-m-d'));
         $dueTime = trim($_POST['due_time'] ?? '12:00');
-        $dueAt = $dueDate . ' ' . (strlen($dueTime) === 5 ? $dueTime . ':00' : $dueTime);
-        if (!strtotime($dueAt)) {
-            $dueAt = date('Y-m-d 12:00:00');
+        if (strlen($dueTime) === 8) {
+            $dueTime = substr($dueTime, 0, 5);
         }
+        $dueDateTimeStr = $dueDate . ' ' . $dueTime;
+        $dt = \DateTime::createFromFormat('Y-m-d H:i', $dueDateTimeStr);
+        if (!$dt || $dt->format('Y-m-d H:i') !== $dueDateTimeStr) {
+            $errMsg = 'Geçersiz takip tarihi veya saati.';
+            if (!empty($_POST['is_ajax'])) {
+                header('Content-Type: application/json');
+                echo json_encode(['success' => false, 'error' => $errMsg]);
+                exit;
+            }
+            die($errMsg);
+        }
+        $dueAt = $dt->format('Y-m-d H:i:s');
 
         $priority = in_array($_POST['priority'] ?? '', ['low', 'normal', 'high']) ? $_POST['priority'] : 'normal';
         $notes = trim($_POST['notes'] ?? '');
@@ -96,6 +107,10 @@ class FollowupsController extends Controller
             exit;
         }
 
+        if (!$res['success']) {
+            die('Hata: ' . ($res['error'] ?? 'İşlem gerçekleştirilemedi.'));
+        }
+
         $companyId = $res['company_id'] ?? 0;
         if ($companyId) {
             $this->redirect('/companies/show/' . $companyId . '?msg=followup_completed');
@@ -112,19 +127,27 @@ class FollowupsController extends Controller
 
         Security::checkCsrfToken($_POST['csrf_token'] ?? '');
 
-        $fu = $this->followUpModel->findById((int)$id);
-        if (!$fu) return $this->error404();
-
-        $this->followUpModel->cancel((int)$id);
+        $userId = Auth::user()['id'] ?? null;
+        $res = SalesCrmService::cancelFollowUp((int)$id, $userId);
 
         if (!empty($_POST['is_ajax'])) {
             header('Content-Type: application/json');
-            echo json_encode(['success' => true]);
+            echo json_encode($res);
             exit;
         }
 
-        $this->redirect('/companies/show/' . $fu['company_id'] . '?msg=followup_cancelled');
+        if (!$res['success']) {
+            die('Hata: ' . ($res['error'] ?? 'İşlem gerçekleştirilemedi.'));
+        }
+
+        $companyId = $res['company_id'] ?? 0;
+        if ($companyId) {
+            $this->redirect('/companies/show/' . $companyId . '?msg=followup_cancelled');
+        } else {
+            $this->redirect('/');
+        }
     }
+
 
     public function delete($id)
     {
