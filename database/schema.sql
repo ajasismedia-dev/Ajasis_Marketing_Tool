@@ -26,7 +26,6 @@ CREATE TABLE `companies` (
   `source` VARCHAR(100) NULL,
   `notes` TEXT NULL,
   `google_place_id` VARCHAR(255) NULL,
-  `google_maps_uri` VARCHAR(500) NULL,
   `enrichment_status` VARCHAR(50) NULL,
   `last_enriched_at` DATETIME NULL,
   `status` ENUM('new', 'contacted', 'replied', 'proposal', 'customer', 'negative') NOT NULL DEFAULT 'new',

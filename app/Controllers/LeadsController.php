@@ -131,7 +131,7 @@ class LeadsController extends Controller
         $fields = [
             'name', 'sector', 'phone', 'whatsapp', 'email', 'website', 'instagram', 
             'facebook', 'linkedin', 'address', 'district', 'city', 'source',
-            'google_place_id', 'google_maps_uri', 'enrichment_status'
+            'google_place_id', 'enrichment_status'
         ];
         
         $data = [];

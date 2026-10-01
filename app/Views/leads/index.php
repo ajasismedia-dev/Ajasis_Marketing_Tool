@@ -155,7 +155,6 @@ $statusLabels = [
                                 <input type="hidden" name="address" id="form-address-<?= $i ?>" value="<?= \App\Helpers\Security::escape($lead['address'] ?? '') ?>">
                                 <input type="hidden" name="source" id="form-source-<?= $i ?>" value="<?= \App\Helpers\Security::escape($lead['source'] ?? '') ?>">
                                 <input type="hidden" name="google_place_id" id="form-google-place-id-<?= $i ?>" value="">
-                                <input type="hidden" name="google_maps_uri" id="form-google-maps-uri-<?= $i ?>" value="">
                                 <input type="hidden" name="enrichment_status" id="form-enrichment-status-<?= $i ?>" value="">
                                 <button type="submit" class="btn btn-primary" style="padding: 0.5rem;"><i data-lucide="plus"></i> Kaydet</button>
                             </form>
@@ -224,6 +223,45 @@ $statusLabels = [
     </div>
 </div>
 
+<!-- Modal for Google Match Confirmation -->
+<div id="googleMatchModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+    <div class="glass-panel" style="width: 100%; max-width: 520px; padding: 2rem;">
+        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
+            <div style="background: rgba(59, 130, 246, 0.2); width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                <i data-lucide="sparkles" style="color: #60a5fa; width: 22px; height: 22px;"></i>
+            </div>
+            <div>
+                <h3 style="font-size: 1.15rem; font-weight: 600; margin: 0;">Muhtemel Google Eşleşmesi</h3>
+                <span style="font-size: 0.8rem; color: var(--text-secondary);">Detaylar çekilmeden önce doğrulanması önerilir</span>
+            </div>
+        </div>
+
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--card-border); border-radius: 8px; padding: 1.25rem; margin-bottom: 1.25rem;">
+            <div style="margin-bottom: 0.75rem;">
+                <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Google Adayı</div>
+                <div id="gmCandidateName" style="font-size: 1rem; font-weight: 600; color: #fff; margin-top: 3px;"></div>
+            </div>
+            <div style="margin-bottom: 0.75rem;">
+                <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Adres</div>
+                <div id="gmCandidateAddress" style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 3px;"></div>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 0.75rem; margin-top: 0.75rem;">
+                <span style="font-size: 0.8rem; color: var(--text-secondary);">Güven Skoru:</span>
+                <span id="gmCandidateScore" class="badge" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; font-weight: 600;"></span>
+            </div>
+        </div>
+
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; font-size: 0.75rem; color: #94a3b8;">
+            <span><i data-lucide="map-pin" style="width: 14px; height: 14px; vertical-align: middle; margin-right: 4px;"></i>Veri kaynağı: Google Maps</span>
+        </div>
+
+        <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+            <button type="button" id="gmModalCancel" class="btn" style="background: rgba(255,255,255,0.1); color: #fff;">İptal</button>
+            <button type="button" id="gmModalConfirm" class="btn btn-primary" style="background: #3b82f6; border-color: #3b82f6;">Eşleşmeyi Onayla</button>
+        </div>
+    </div>
+</div>
+
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.google-enrich-btn').forEach(btn => {
@@ -274,7 +312,38 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('waModalSend').addEventListener('click', () => {
         sendWhatsApp();
     });
+
+    // Google Medium Match Modal Listeners
+    const gmModal = document.getElementById('googleMatchModal');
+    const gmCancel = document.getElementById('gmModalCancel');
+    const gmConfirm = document.getElementById('gmModalConfirm');
+
+    if (gmCancel) {
+        gmCancel.addEventListener('click', () => {
+            if (gmModal) gmModal.style.display = 'none';
+            if (window.pendingGoogleMatch) {
+                const { btn, originalHtml } = window.pendingGoogleMatch;
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+                if (window.lucide) lucide.createIcons();
+                window.pendingGoogleMatch = null;
+            }
+        });
+    }
+
+    if (gmConfirm) {
+        gmConfirm.addEventListener('click', () => {
+            if (gmModal) gmModal.style.display = 'none';
+            if (window.pendingGoogleMatch) {
+                const { btn, index, matchToken, originalHtml } = window.pendingGoogleMatch;
+                window.pendingGoogleMatch = null;
+                confirmGoogleLead(btn, index, matchToken, originalHtml);
+            }
+        });
+    }
 });
+
+window.pendingGoogleMatch = null;
 
 function enrichGoogleLead(btn, index, name, city, district) {
     const originalHtml = btn.innerHTML;
@@ -303,13 +372,25 @@ function enrichGoogleLead(btn, index, name, city, district) {
         }
 
         if (res.status === 'medium_confidence') {
-            const cand = res.candidate;
-            const confirmMsg = `Muhtemel Google Places Eşleşmesi:\n\nİşletme: ${cand.display_name}\nAdres: ${cand.formatted_address}\n\nBu işletme bilgilerini doğrulamak ve detayları çekmek istiyor musunuz?`;
-            if (confirm(confirmMsg)) {
-                confirmGoogleLead(btn, index, res.match_token, originalHtml);
-            } else {
-                btn.innerHTML = originalHtml;
-                btn.disabled = false;
+            const cand = res.candidate || {};
+            const nameEl = document.getElementById('gmCandidateName');
+            const addrEl = document.getElementById('gmCandidateAddress');
+            const scoreEl = document.getElementById('gmCandidateScore');
+
+            if (nameEl) nameEl.textContent = cand.display_name || '-';
+            if (addrEl) addrEl.textContent = cand.formatted_address || '-';
+            if (scoreEl) scoreEl.textContent = '%' + Math.round((res.confidence_score || 0.6) * 100);
+
+            window.pendingGoogleMatch = {
+                btn: btn,
+                index: index,
+                matchToken: res.match_token,
+                originalHtml: originalHtml
+            };
+
+            const gmModal = document.getElementById('googleMatchModal');
+            if (gmModal) {
+                gmModal.style.display = 'flex';
                 if (window.lucide) lucide.createIcons();
             }
             return;
@@ -415,12 +496,8 @@ function applyEnrichedLeadData(btn, index, res, originalHtml) {
             const fGid = document.getElementById('form-google-place-id-' + index);
             if (fGid) fGid.value = res.google_place_id;
         }
-        if (res.google_maps_uri) {
-            const fGuri = document.getElementById('form-google-maps-uri-' + index);
-            if (fGuri) fGuri.value = res.google_maps_uri;
-        }
         const fStatus = document.getElementById('form-enrichment-status-' + index);
-        if (fStatus) fStatus.value = 'google_enriched';
+        if (fStatus) fStatus.value = res.status || 'google_enriched';
 
         // Update Source badge
         const row = document.getElementById('lead-row-' + index);

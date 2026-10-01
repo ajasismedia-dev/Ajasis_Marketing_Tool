@@ -98,4 +98,33 @@ TestHelper::assertEqual(5, $sourceCounts['OpenStreetMap'] ?? 0, 'OSM quota is 5'
 $spillover = LeadFinderService::balanceSources(['KTO' => $mockKto, 'KSO' => [], 'OSM' => $mockOsm], 25);
 TestHelper::assertEqual(25, count($spillover), 'Spillover fills quota to 25');
 
+echo "\n--- GOOGLE PLACES POLICY COMPLIANCE TESTS ---\n";
+// 1. Verify schema does not contain google_maps_uri
+$schemaSql = file_get_contents(__DIR__ . '/../database/schema.sql');
+TestHelper::assertTrue(strpos($schemaSql, 'google_maps_uri') === false, 'Schema does NOT contain google_maps_uri');
+TestHelper::assertTrue(strpos($schemaSql, 'google_place_id') !== false, 'Schema contains google_place_id');
+
+// 2. Verify LeadsController whitelist does NOT contain google_maps_uri
+$controllerCode = file_get_contents(__DIR__ . '/../app/Controllers/LeadsController.php');
+TestHelper::assertTrue(strpos($controllerCode, "'google_maps_uri'") === false, 'LeadsController does NOT accept google_maps_uri');
+
+// 3. Verify Google Places Cache files store ONLY Place ID and metadata
+$cacheFiles = glob(__DIR__ . '/../storage/cache/google_places/*.json');
+$checkedCount = 0;
+foreach ($cacheFiles as $cf) {
+    if (strpos(basename($cf), 'pending_') === 0) continue;
+    $cacheJson = json_decode(file_get_contents($cf), true);
+    $checkedCount++;
+    TestHelper::assertTrue(!empty($cacheJson['google_place_id']), 'Cache has google_place_id');
+    TestHelper::assertTrue(!isset($cacheJson['phone']), 'Cache has NO phone');
+    TestHelper::assertTrue(!isset($cacheJson['formattedAddress']), 'Cache has NO formattedAddress');
+    TestHelper::assertTrue(!isset($cacheJson['address']), 'Cache has NO address');
+    TestHelper::assertTrue(!isset($cacheJson['displayName']), 'Cache has NO displayName');
+    TestHelper::assertTrue(!isset($cacheJson['websiteUri']), 'Cache has NO websiteUri');
+    TestHelper::assertTrue(!isset($cacheJson['google_maps_uri']), 'Cache has NO google_maps_uri');
+}
+if ($checkedCount > 0) {
+    TestHelper::assertTrue($checkedCount > 0, "Verified $checkedCount cache files are strictly policy compliant");
+}
+
 require __DIR__ . '/test_string_parsing.php';

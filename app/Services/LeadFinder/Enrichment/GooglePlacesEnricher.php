@@ -10,11 +10,12 @@ class GooglePlacesEnricher
     private static $placeDetailsUrl = 'https://places.googleapis.com/v1/places/';
     private static $cacheDir = __DIR__ . '/../../../../storage/cache/google_places/';
     private static $logFile = __DIR__ . '/../../../../storage/logs/google_places.log';
-    private static $cacheTtl = 2592000; // 30 days in seconds (30 * 86400)
-    private static $pendingTtl = 3600; // 1 hour for medium match confirmation
+    private static $placeIdCacheTtl = 2592000; // 30 days in seconds (30 * 86400)
+    private static $pendingTtl = 3600; // 1 hour for medium match confirmation token
 
     /**
-     * Enrich a lead using Google Places API (New) and subsequent WebsiteEnricher
+     * Enrich a lead using Google Places API (New) for identity/website resolution,
+     * then extract contact data via WebsiteEnricher without permanently storing Google content.
      *
      * @param string $companyName
      * @param string $city
@@ -29,39 +30,41 @@ class GooglePlacesEnricher
                 'success' => false,
                 'status' => 'empty_query',
                 'message' => 'Firma adı belirtilmedi.',
-                'api_stats' => ['text_search_calls' => 0, 'place_details_calls' => 0, 'cache_hit' => false]
+                'api_stats' => ['text_search_calls' => 0, 'place_details_calls' => 0, 'place_id_cache_hit' => false]
             ];
         }
 
-        // 1. Check 30-day Cache
-        $cacheKey = md5(self::normalizeCoreName($companyName) . '_' . StringHelper::normalizeTurkish(mb_strtolower($city)));
+        $coreName = self::normalizeCoreName($companyName);
+        $normCity = StringHelper::normalizeTurkish(mb_strtolower($city ?: 'Konya'));
+        $cacheKey = md5($coreName . '_' . $normCity);
         $cacheFile = self::$cacheDir . $cacheKey . '.json';
 
-        if (file_exists($cacheFile) && (time() - filemtime($cacheFile) < self::$cacheTtl)) {
+        // 1. Check Place ID Cache (Policy-compliant: ONLY place_id and metadata stored)
+        if (file_exists($cacheFile) && (time() - filemtime($cacheFile) < self::$placeIdCacheTtl)) {
             $cached = json_decode(file_get_contents($cacheFile), true);
-            if (!empty($cached) && is_array($cached)) {
-                $cached['from_cache'] = true;
-                $cached['api_stats'] = [
-                    'text_search_calls' => 0,
-                    'place_details_calls' => 0,
-                    'cache_hit' => true
-                ];
-                self::logApiCall($companyName, 0, 0, true, $cached['confidence'] ?? 'HIGH');
-                return $cached;
+            if (!empty($cached['google_place_id'])) {
+                // Place ID Cache Hit! Skip Text Search entirely (0 Text Search, 1 Place Details)
+                return self::fetchDetailsAndEnrich(
+                    $cached['google_place_id'],
+                    $coreName,
+                    $cacheFile,
+                    0, // 0 text search calls
+                    true // place_id_cache_hit = true
+                );
             }
         }
 
-        // 2. Check API Key
-        $apiKey = self::getApiKey();
-        if (empty($apiKey)) {
+        // 2. Check API Key & Configuration
+        if (!self::isConfigured()) {
             return [
                 'success' => false,
                 'status' => 'not_configured',
                 'confidence' => 'NONE',
-                'message' => 'Google Places API anahtarı gerekli (config.php içinde yapılandırılmadı).',
-                'api_stats' => ['text_search_calls' => 0, 'place_details_calls' => 0, 'cache_hit' => false]
+                'message' => 'Google Places API anahtarı gerekli (config.php içinde yapılandırılmadı veya devre dışı).',
+                'api_stats' => ['text_search_calls' => 0, 'place_details_calls' => 0, 'place_id_cache_hit' => false]
             ];
         }
+        $apiKey = self::getApiKey();
 
         if (defined('GOOGLE_PLACES_ENABLED') && !GOOGLE_PLACES_ENABLED) {
             return [
@@ -69,7 +72,7 @@ class GooglePlacesEnricher
                 'status' => 'not_configured',
                 'confidence' => 'NONE',
                 'message' => 'Google Places entegrasyonu devre dışı bırakılmış.',
-                'api_stats' => ['text_search_calls' => 0, 'place_details_calls' => 0, 'cache_hit' => false]
+                'api_stats' => ['text_search_calls' => 0, 'place_details_calls' => 0, 'place_id_cache_hit' => false]
             ];
         }
 
@@ -81,27 +84,24 @@ class GooglePlacesEnricher
         $searchResult = self::executeTextSearch($queryText, $apiKey);
 
         if (!$searchResult['success']) {
-            $searchResult['api_stats'] = ['text_search_calls' => 1, 'place_details_calls' => 0, 'cache_hit' => false];
-            self::logApiCall($companyName, 1, 0, false, 'ERROR');
+            $searchResult['api_stats'] = ['text_search_calls' => 1, 'place_details_calls' => 0, 'place_id_cache_hit' => false];
+            self::logApiCall($coreName, 1, 0, false, 'ERROR');
             return $searchResult;
         }
 
         $candidates = $searchResult['candidates'] ?? [];
         if (empty($candidates)) {
-            $result = [
+            self::logApiCall($coreName, 1, 0, false, 'NONE');
+            return [
                 'success' => false,
                 'status' => 'not_found',
                 'confidence' => 'NONE',
                 'message' => 'Google Places üzerinde eşleşen işletme bulunamadı.',
-                'from_cache' => false,
-                'api_stats' => ['text_search_calls' => 1, 'place_details_calls' => 0, 'cache_hit' => false]
+                'api_stats' => ['text_search_calls' => 1, 'place_details_calls' => 0, 'place_id_cache_hit' => false]
             ];
-            self::logApiCall($companyName, 1, 0, false, 'NONE');
-            self::saveCache($cacheFile, $result);
-            return $result;
         }
 
-        // 4. Calculate Confidence for top 5 candidates
+        // 4. Calculate Confidence for candidates
         $evaluated = [];
         $candidates = array_slice($candidates, 0, 5);
 
@@ -110,77 +110,68 @@ class GooglePlacesEnricher
             $candAddr = $cand['formattedAddress'] ?? '';
             $conf = self::calculateConfidence($companyName, $candName, $candAddr, $cityClean);
             $evaluated[] = [
-                'candidate' => $cand,
+                'place_id' => $cand['id'] ?? '',
                 'confidence' => $conf['level'],
                 'score' => $conf['score'],
                 'display_name' => $candName,
-                'formatted_address' => $candAddr,
-                'place_id' => $cand['id'] ?? '',
-                'google_maps_uri' => $cand['googleMapsUri'] ?? '',
-                'business_status' => $cand['businessStatus'] ?? 'OPERATIONAL'
+                'formatted_address' => $candAddr
             ];
         }
 
-        // Sort candidates by score descending
         usort($evaluated, function($a, $b) {
             return $b['score'] <=> $a['score'];
         });
 
         $best = $evaluated[0];
 
-        // 5. Handle LOW Confidence (Strictly rejected, no bypass)
+        // 5. Handle LOW Confidence: Strictly reject (no storage, no bypass)
         if ($best['confidence'] === 'LOW') {
-            $result = [
+            self::logApiCall($coreName, 1, 0, false, 'LOW');
+            return [
                 'success' => false,
                 'status' => 'low_confidence',
                 'confidence' => 'LOW',
                 'score' => $best['score'],
-                'candidate' => [
-                    'display_name' => $best['display_name'],
-                    'formatted_address' => $best['formatted_address']
-                ],
                 'message' => 'Eşleşme bulunamadı / düşük güven (otomatik kayıt yapılmaz).',
-                'from_cache' => false,
-                'api_stats' => ['text_search_calls' => 1, 'place_details_calls' => 0, 'cache_hit' => false]
+                'api_stats' => ['text_search_calls' => 1, 'place_details_calls' => 0, 'place_id_cache_hit' => false]
             ];
-            self::logApiCall($companyName, 1, 0, false, 'LOW');
-            self::saveCache($cacheFile, $result);
-            return $result;
         }
 
-        // 6. Handle MEDIUM Confidence (Requires user confirmation with token)
+        // 6. Handle MEDIUM Confidence: Return confirmation token without storing Google content in server cache
         if ($best['confidence'] === 'MEDIUM') {
             $matchToken = bin2hex(random_bytes(16));
-            self::savePendingCandidate($matchToken, [
+            // Store ONLY token, place_id, normalized_company and timestamp in pending storage
+            self::savePendingToken($matchToken, [
                 'place_id' => $best['place_id'],
-                'company_name' => $companyName,
-                'city' => $cityClean,
-                'district' => $districtClean,
-                'best_candidate' => $best,
+                'normalized_company' => $coreName,
                 'cache_file' => $cacheFile,
-                'created_at' => time()
+                'score' => $best['score'],
+                'timestamp' => time()
             ]);
 
-            self::logApiCall($companyName, 1, 0, false, 'MEDIUM');
+            self::logApiCall($coreName, 1, 0, false, 'MEDIUM_PENDING');
 
             return [
                 'success' => true,
                 'status' => 'medium_confidence',
                 'confidence' => 'MEDIUM',
+                'confidence_level' => 'MEDIUM',
+                'confidence_score' => $best['score'],
                 'score' => $best['score'],
                 'match_token' => $matchToken,
                 'candidate' => [
                     'display_name' => $best['display_name'],
                     'formatted_address' => $best['formatted_address']
                 ],
+                'attribution' => 'Google Maps',
                 'message' => 'Muhtemel Google Places eşleşmesi bulundu, onayınız bekleniyor.',
-                'from_cache' => false,
-                'api_stats' => ['text_search_calls' => 1, 'place_details_calls' => 0, 'cache_hit' => false]
+                'api_stats' => ['text_search_calls' => 1, 'place_details_calls' => 0, 'place_id_cache_hit' => false]
             ];
         }
 
-        // 7. HIGH Match: Fetch Place Details immediately
-        return self::finalizeEnrichment($best['place_id'], $best, $companyName, $cacheFile, 1);
+        // 7. HIGH Match: Save Place ID to cache & fetch details immediately (1 Text Search, 1 Place Details)
+        self::savePlaceIdCache($cacheFile, $coreName, $best['place_id']);
+        return self::fetchDetailsAndEnrich($best['place_id'], $coreName, $cacheFile, 1, false, 'HIGH', $best['score']);
     }
 
     /**
@@ -191,93 +182,147 @@ class GooglePlacesEnricher
      */
     public static function confirmMatch($matchToken)
     {
-        $pending = self::getPendingCandidate($matchToken);
+        $pending = self::getPendingToken($matchToken);
         if (!$pending) {
             return [
                 'success' => false,
                 'status' => 'invalid_token',
                 'message' => 'Geçersiz veya süresi dolmuş eşleşme oturumu.',
-                'api_stats' => ['text_search_calls' => 0, 'place_details_calls' => 0, 'cache_hit' => false]
+                'api_stats' => ['text_search_calls' => 0, 'place_details_calls' => 0, 'place_id_cache_hit' => false]
             ];
         }
 
         $placeId = $pending['place_id'];
-        $best = $pending['best_candidate'];
-        $companyName = $pending['company_name'];
+        $coreName = $pending['normalized_company'];
         $cacheFile = $pending['cache_file'];
+        $score = $pending['score'] ?? 0.6;
 
-        // Remove pending token once used
-        self::deletePendingCandidate($matchToken);
+        // Remove single-use pending token
+        self::deletePendingToken($matchToken);
 
-        // Fetch Place Details (0 text search calls, 1 place details call)
-        return self::finalizeEnrichment($placeId, $best, $companyName, $cacheFile, 0);
+        // Save verified Place ID to 30-day cache
+        self::savePlaceIdCache($cacheFile, $coreName, $placeId);
+
+        // Fetch Place Details and run WebsiteEnricher (0 Text Search, 1 Place Details)
+        return self::fetchDetailsAndEnrich($placeId, $coreName, $cacheFile, 0, false, 'MEDIUM_CONFIRMED', $score);
     }
 
-    private static function finalizeEnrichment($placeId, array $best, $companyName, $cacheFile, $textSearchCallsCount = 0)
+    /**
+     * Execute Place Details in-memory, discover websiteUri, crawl with WebsiteEnricher,
+     * and return website-derived contact data without storing Google content.
+     */
+    private static function fetchDetailsAndEnrich($placeId, $coreName, $cacheFile, $textSearchCount, $cacheHit, $confidence = 'HIGH', $score = 1.0)
     {
         $apiKey = self::getApiKey();
         $detailsResult = self::executePlaceDetails($placeId, $apiKey);
 
         if (!$detailsResult['success']) {
             $detailsResult['api_stats'] = [
-                'text_search_calls' => $textSearchCallsCount,
+                'text_search_calls' => $textSearchCount,
                 'place_details_calls' => 1,
-                'cache_hit' => false
+                'place_id_cache_hit' => $cacheHit
             ];
-            self::logApiCall($companyName, $textSearchCallsCount, 1, false, 'DETAILS_ERROR');
+            self::logApiCall($coreName, $textSearchCount, 1, $cacheHit, 'DETAILS_ERROR');
             return $detailsResult;
         }
 
         $placeDetails = $detailsResult['data'];
-        $phone = $placeDetails['nationalPhoneNumber'] ?? $placeDetails['internationalPhoneNumber'] ?? '';
-        $website = $placeDetails['websiteUri'] ?? '';
-        $address = $placeDetails['formattedAddress'] ?? $best['formatted_address'];
-        $googleMapsUri = $placeDetails['googleMapsUri'] ?? $best['google_maps_uri'];
-        $businessStatus = $placeDetails['businessStatus'] ?? $best['business_status'];
-        $location = $placeDetails['location'] ?? null;
+        $websiteUri = $placeDetails['websiteUri'] ?? '';
+        $candName = $placeDetails['displayName']['text'] ?? '';
+        $candAddress = $placeDetails['formattedAddress'] ?? '';
 
-        // Auto-chain to WebsiteEnricher if website found
-        $webData = [];
-        $sourceTrace = 'Google Places';
-        if (!empty($website)) {
-            $enrichedWeb = WebsiteEnricher::enrich($website);
-            if (!empty($enrichedWeb) && is_array($enrichedWeb)) {
-                $webData = $enrichedWeb;
-                $sourceTrace = 'Google Places + Website';
-            }
-        }
-
-        $finalEnriched = [
-            'success' => true,
-            'status' => 'success',
-            'confidence' => $best['confidence'] ?? 'HIGH',
-            'score' => $best['score'] ?? 1.0,
-            'google_place_id' => $placeId,
-            'google_maps_uri' => $googleMapsUri,
-            'phone' => $phone,
-            'website' => $website,
-            'address' => $address,
-            'business_status' => $businessStatus,
-            'location' => $location,
-            'email' => $webData['email'] ?? '',
-            'instagram' => $webData['instagram'] ?? '',
-            'facebook' => $webData['facebook'] ?? '',
-            'linkedin' => $webData['linkedin'] ?? '',
-            'youtube' => $webData['youtube'] ?? '',
-            'website_data' => $webData,
-            'source_trace' => $sourceTrace,
-            'from_cache' => false,
-            'api_stats' => [
-                'text_search_calls' => $textSearchCallsCount,
-                'place_details_calls' => 1,
-                'cache_hit' => false
-            ]
+        // Transient Google preview for immediate UI attribution only (never saved to CRM)
+        $googlePreview = [
+            'display_name' => $candName,
+            'phone' => $placeDetails['nationalPhoneNumber'] ?? $placeDetails['internationalPhoneNumber'] ?? '',
+            'address' => $candAddress,
+            'attribution' => 'Google Maps'
         ];
 
-        self::saveCache($cacheFile, $finalEnriched);
-        self::logApiCall($companyName, $textSearchCallsCount, 1, false, $finalEnriched['confidence']);
+        $candidateInfo = [
+            'display_name' => $candName,
+            'formatted_address' => $candAddress
+        ];
 
-        return $finalEnriched;
+        // 1. If Google has NO websiteUri
+        if (empty($websiteUri)) {
+            self::logApiCall($coreName, $textSearchCount, 1, $cacheHit, 'MATCHED_NO_WEBSITE');
+            return [
+                'success' => true,
+                'status' => 'google_matched_no_website',
+                'confidence' => $confidence,
+                'confidence_level' => $confidence,
+                'confidence_score' => $score,
+                'candidate' => $candidateInfo,
+                'google_place_id' => $placeId,
+                'website' => '',
+                'phone' => '',
+                'email' => '',
+                'address' => '',
+                'instagram' => '',
+                'facebook' => '',
+                'linkedin' => '',
+                'youtube' => '',
+                'source_trace' => '',
+                'google_preview' => $googlePreview,
+                'message' => 'İşletme eşleşti ancak web sitesi bulunamadı. Google içeriği CRM\'e kaydedilmedi.',
+                'api_stats' => [
+                    'text_search_calls' => $textSearchCount,
+                    'place_details_calls' => 1,
+                    'place_id_cache_hit' => $cacheHit
+                ]
+            ];
+        }
+
+        // 2. Website found: Crawl company's official website using WebsiteEnricher
+        $webData = WebsiteEnricher::enrich($websiteUri);
+        $finalWebsiteUrl = $websiteUri;
+
+        $phone = '';
+        $email = '';
+        $address = '';
+        $instagram = '';
+        $facebook = '';
+        $linkedin = '';
+        $youtube = '';
+
+        if (!empty($webData) && is_array($webData)) {
+            $phone = $webData['phone'] ?? '';
+            $email = $webData['email'] ?? '';
+            $address = $webData['address'] ?? '';
+            $instagram = $webData['instagram'] ?? '';
+            $facebook = $webData['facebook'] ?? '';
+            $linkedin = $webData['linkedin'] ?? '';
+            $youtube = $webData['youtube'] ?? '';
+        }
+
+        self::logApiCall($coreName, $textSearchCount, 1, $cacheHit, 'SUCCESS');
+
+        return [
+            'success' => true,
+            'status' => 'success',
+            'confidence' => $confidence,
+            'confidence_level' => $confidence,
+            'confidence_score' => $score,
+            'candidate' => $candidateInfo,
+            'google_place_id' => $placeId,
+            'website' => $finalWebsiteUrl,
+            'phone' => $phone,
+            'email' => $email,
+            'address' => $address,
+            'instagram' => $instagram,
+            'facebook' => $facebook,
+            'linkedin' => $linkedin,
+            'youtube' => $youtube,
+            'source_trace' => 'Website',
+            'website_data' => $webData ?: [],
+            'google_preview' => $googlePreview,
+            'api_stats' => [
+                'text_search_calls' => $textSearchCount,
+                'place_details_calls' => 1,
+                'place_id_cache_hit' => $cacheHit
+            ]
+        ];
     }
 
     private static function executeTextSearch($queryText, $apiKey)
@@ -296,7 +341,7 @@ class GooglePlacesEnricher
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Content-Type: application/json',
             'X-Goog-Api-Key: ' . $apiKey,
-            'X-Goog-FieldMask: places.id,places.displayName,places.formattedAddress,places.businessStatus,places.primaryType,places.googleMapsUri'
+            'X-Goog-FieldMask: places.id,places.displayName,places.formattedAddress,places.businessStatus,places.primaryType'
         ]);
         curl_setopt($ch, CURLOPT_USERAGENT, 'AjasisMarketingTool/1.0');
 
@@ -305,50 +350,27 @@ class GooglePlacesEnricher
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
         if ($err) {
-            return [
-                'success' => false,
-                'status' => 'timeout',
-                'message' => 'Google Places istek zaman aşımına uğradı.'
-            ];
+            return ['success' => false, 'status' => 'timeout', 'message' => 'Google Places istek zaman aşımına uğradı.'];
         }
 
         if ($code === 400 || $code === 403) {
-            return [
-                'success' => false,
-                'status' => 'google_error',
-                'message' => 'Google Places API isteği reddedildi (API anahtarı veya yetkilendirme hatası).'
-            ];
+            return ['success' => false, 'status' => 'google_error', 'message' => 'Google Places API isteği reddedildi (API anahtarı veya yetkilendirme hatası).'];
         }
 
         if ($code === 429) {
-            return [
-                'success' => false,
-                'status' => 'quota_exceeded',
-                'message' => 'Google Places API kota limiti aşıldı.'
-            ];
+            return ['success' => false, 'status' => 'quota_exceeded', 'message' => 'Google Places API kota limiti aşıldı.'];
         }
 
         if ($code >= 500) {
-            return [
-                'success' => false,
-                'status' => 'google_error',
-                'message' => 'Google Places sunucu hatası meydana geldi.'
-            ];
+            return ['success' => false, 'status' => 'google_error', 'message' => 'Google Places sunucu hatası meydana geldi.'];
         }
 
         $data = json_decode($resp, true);
-        if (!$data || !is_array($data)) {
-            return [
-                'success' => false,
-                'status' => 'google_error',
-                'message' => 'Google Places geçersiz yanıt döndürdü.'
-            ];
+        if (!is_array($data)) {
+            return ['success' => false, 'status' => 'google_error', 'message' => 'Google Places geçersiz yanıt döndürdü.'];
         }
 
-        return [
-            'success' => true,
-            'candidates' => $data['places'] ?? []
-        ];
+        return ['success' => true, 'candidates' => $data['places'] ?? []];
     }
 
     private static function executePlaceDetails($placeId, $apiKey)
@@ -362,7 +384,7 @@ class GooglePlacesEnricher
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Content-Type: application/json',
             'X-Goog-Api-Key: ' . $apiKey,
-            'X-Goog-FieldMask: id,displayName,formattedAddress,nationalPhoneNumber,internationalPhoneNumber,websiteUri,businessStatus,location,googleMapsUri'
+            'X-Goog-FieldMask: id,displayName,formattedAddress,nationalPhoneNumber,internationalPhoneNumber,websiteUri,businessStatus'
         ]);
         curl_setopt($ch, CURLOPT_USERAGENT, 'AjasisMarketingTool/1.0');
 
@@ -371,34 +393,19 @@ class GooglePlacesEnricher
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
         if ($err) {
-            return [
-                'success' => false,
-                'status' => 'timeout',
-                'message' => 'Google Place Details istek zaman aşımına uğradı.'
-            ];
+            return ['success' => false, 'status' => 'timeout', 'message' => 'Google Place Details istek zaman aşımına uğradı.'];
         }
 
         if ($code >= 400 || !$resp) {
-            return [
-                'success' => false,
-                'status' => 'google_error',
-                'message' => 'Google Place Details verisi alınamadı.'
-            ];
+            return ['success' => false, 'status' => 'google_error', 'message' => 'Google Place Details verisi alınamadı.'];
         }
 
         $data = json_decode($resp, true);
         if (!$data || !is_array($data)) {
-            return [
-                'success' => false,
-                'status' => 'google_error',
-                'message' => 'Google Place Details geçersiz yanıt döndürdü.'
-            ];
+            return ['success' => false, 'status' => 'google_error', 'message' => 'Google Place Details geçersiz yanıt döndürdü.'];
         }
 
-        return [
-            'success' => true,
-            'data' => $data
-        ];
+        return ['success' => true, 'data' => $data];
     }
 
     public static function calculateConfidence($companyName, $candidateName, $candidateAddress, $expectedCity = 'Konya')
@@ -419,7 +426,6 @@ class GooglePlacesEnricher
             return ['level' => 'HIGH', 'score' => 1.0];
         }
 
-        // Token overlap
         $tokensA = array_filter(explode(' ', $coreA), function($t) { return mb_strlen($t) > 1; });
         $tokensB = array_filter(explode(' ', $coreB), function($t) { return mb_strlen($t) > 1; });
 
@@ -458,10 +464,8 @@ class GooglePlacesEnricher
     public static function normalizeCoreName($name)
     {
         $name = StringHelper::normalizeTurkish(mb_strtolower($name, 'UTF-8'));
-        // Remove punctuation
         $name = preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $name);
         
-        // Common Turkish company suffixes
         $suffixes = [
             '\\banonim sirketi\\b', '\\blimited sirketi\\b', '\\bltd sti\\b', '\\bltd\\b', '\\bsti\\b',
             '\\ba s\\b', '\\bas\\b', '\\bsanayi ve ticaret\\b', '\\bsan ve tic\\b', '\\bsanayi ve tic\\b',
@@ -472,19 +476,29 @@ class GooglePlacesEnricher
         foreach ($suffixes as $s) {
             $name = preg_replace('/' . $s . '/u', ' ', $name);
         }
-        $name = preg_replace('/\s+/', ' ', trim($name));
-        return $name;
+        return preg_replace('/\s+/', ' ', trim($name));
     }
 
-    private static function saveCache($cacheFile, $data)
+    /**
+     * Save ONLY place_id and metadata (policy-compliant, NO Google content stored).
+     */
+    private static function savePlaceIdCache($cacheFile, $normalizedCompany, $placeId)
     {
         if (!is_dir(self::$cacheDir)) {
             @mkdir(self::$cacheDir, 0777, true);
         }
+        $data = [
+            'normalized_company' => $normalizedCompany,
+            'google_place_id' => $placeId,
+            'matched_at' => time()
+        ];
         @file_put_contents($cacheFile, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
     }
 
-    private static function savePendingCandidate($token, $data)
+    /**
+     * Save transient medium-match token (NO Google content stored).
+     */
+    private static function savePendingToken($token, array $data)
     {
         if (!is_dir(self::$cacheDir)) {
             @mkdir(self::$cacheDir, 0777, true);
@@ -493,9 +507,8 @@ class GooglePlacesEnricher
         @file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
     }
 
-    private static function getPendingCandidate($token)
+    private static function getPendingToken($token)
     {
-        // Strictly sanitize token to hex characters
         if (!preg_match('/^[a-f0-9]{32}$/', $token)) {
             return null;
         }
@@ -506,7 +519,7 @@ class GooglePlacesEnricher
         return null;
     }
 
-    private static function deletePendingCandidate($token)
+    private static function deletePendingToken($token)
     {
         if (preg_match('/^[a-f0-9]{32}$/', $token)) {
             $file = self::$cacheDir . 'pending_' . $token . '.json';
@@ -516,16 +529,23 @@ class GooglePlacesEnricher
         }
     }
 
-    private static function logApiCall($companyName, $textSearchCount, $placeDetailsCount, $cacheHit, $confidence)
+    private static function logApiCall($companyKey, $textSearchCount, $placeDetailsCount, $placeIdCacheHit, $status)
     {
         $logDir = dirname(self::$logFile);
         if (!is_dir($logDir)) {
             @mkdir($logDir, 0777, true);
         }
         $time = date('Y-m-d H:i:s');
-        $hitStr = $cacheHit ? '1' : '0';
-        $logLine = "[$time] FIRMA: $companyName | TEXT_SEARCH: $textSearchCount | PLACE_DETAILS: $placeDetailsCount | CACHE_HIT: $hitStr | CONFIDENCE: $confidence\n";
+        $hitStr = $placeIdCacheHit ? '1' : '0';
+        // NEVER log API key, response body, phone, address, or websiteUri
+        $logLine = "[$time] FIRMA: $companyKey | TEXT_SEARCH: $textSearchCount | PLACE_DETAILS: $placeDetailsCount | PLACE_ID_CACHE_HIT: $hitStr | STATUS: $status\n";
         @file_put_contents(self::$logFile, $logLine, FILE_APPEND);
+    }
+
+    public static function isConfigured()
+    {
+        $enabled = !defined('GOOGLE_PLACES_ENABLED') || (bool)GOOGLE_PLACES_ENABLED;
+        return $enabled && !empty(self::getApiKey());
     }
 
     private static function getApiKey()
