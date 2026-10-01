@@ -127,4 +127,35 @@ if ($checkedCount > 0) {
     TestHelper::assertTrue($checkedCount > 0, "Verified $checkedCount cache files are strictly policy compliant");
 }
 
+echo "\n--- FAZ 3.6.3 SCORING & WEBSITE PERSISTENCE TESTS ---\n";
+// 1. Confidence score bounded in [0.00, 1.00]
+$adraRes = GooglePlacesEnricher::calculateConfidence('ADRA BÜRO MOBİLYA SANAYİ VE TİCARET LİMİTED ŞİRKETİ', 'Adrabüromobilya', 'Karatay, Konya');
+TestHelper::assertTrue($adraRes['score'] <= 1.0, 'ADRA confidence score <= 1.0 (got ' . $adraRes['score'] . ')');
+TestHelper::assertTrue($adraRes['score'] >= 0.0, 'ADRA confidence score >= 0.0');
+TestHelper::assertEqual('HIGH', $adraRes['level'], 'ADRA is HIGH level match');
+
+$adaletRes = GooglePlacesEnricher::calculateConfidence('ADALET DÖKÜM A.Ş.', 'Adalet Çelik Döküm', 'Karatay, Konya');
+TestHelper::assertTrue($adaletRes['score'] <= 1.0 && $adaletRes['score'] >= 0.70, 'Adalet Döküm is HIGH match within [0.70, 1.00]');
+
+$twobkRes = GooglePlacesEnricher::calculateConfidence('2BK MİMARLIK MÜHENDİSLİK İNŞAAT TAAHHÜT GAYRİMENKUL DEĞERLEME SANAYİ VE TİCARET LİMİTED ŞİRKETİ', '2BK Mimarlık', 'Selçuklu, Konya');
+TestHelper::assertTrue($twobkRes['score'] <= 1.0 && $twobkRes['score'] >= 0.70, '2BK is HIGH match within [0.70, 1.00]');
+
+$burotimeRes = GooglePlacesEnricher::calculateConfidence('TOSUNOĞULLARI MOBİLYA SANAYİ VE TİCARET ANONİM ŞİRKETİ', 'Bürotime', 'Selçuklu, Konya');
+TestHelper::assertEqual('LOW', $burotimeRes['level'], 'Tosunoğulları vs Bürotime is LOW match');
+TestHelper::assertTrue($burotimeRes['score'] < 0.40, 'Bürotime score < 0.40');
+
+$shortGenericRes = GooglePlacesEnricher::calculateConfidence('ALİ KAYA İNŞAAT VE EMLAK LİMİTED ŞİRKETİ', 'Emlak', 'Meram, Konya');
+TestHelper::assertEqual('LOW', $shortGenericRes['level'], 'Short generic single-token candidate is LOW match');
+TestHelper::assertTrue($shortGenericRes['score'] < 0.40, 'Short generic score < 0.40');
+
+// 2. WebsiteEnricher final_url presence and SSRF rejection
+$ssrfRes = WebsiteEnricher::enrich('http://127.0.0.1');
+TestHelper::assertNull($ssrfRes, 'WebsiteEnricher SSRF blocked returns null (no final_url)');
+
+// 3. Persistent source checks (Absence of "Google Places" and presence of "Website")
+$viewCode = file_get_contents(__DIR__ . '/../app/Views/leads/index.php');
+TestHelper::assertTrue(strpos($viewCode, "res.source_trace || 'Google Places'") === false, 'View does NOT fallback to Google Places in source badge');
+TestHelper::assertTrue(strpos($viewCode, "form-source-") !== false, 'View updates hidden form-source field');
+TestHelper::assertTrue(strpos($viewCode, "Powered by Google") !== false, 'View includes official Google attribution');
+
 require __DIR__ . '/test_string_parsing.php';

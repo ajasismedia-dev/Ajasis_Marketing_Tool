@@ -18,6 +18,7 @@ class WebsiteEnricher
         if (!$html) return null;
 
         $data = self::extractData($html, $safeRequest['url']);
+        $data['final_url'] = $safeRequest['url'];
         
         $internalLinks = self::extractInternalContactLinks($html, $safeRequest['url']);
         $pagesFetched = 1;
@@ -35,6 +36,7 @@ class WebsiteEnricher
             }
         }
 
+        $data['final_url'] = $safeRequest['url'];
         return array_filter($data);
     }
 

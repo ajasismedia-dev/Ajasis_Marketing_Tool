@@ -276,7 +276,7 @@ class GooglePlacesEnricher
 
         // 2. Website found: Crawl company's official website using WebsiteEnricher
         $webData = WebsiteEnricher::enrich($websiteUri);
-        $finalWebsiteUrl = $websiteUri;
+        $finalWebsiteUrl = (!empty($webData['final_url'])) ? $webData['final_url'] : '';
 
         $phone = '';
         $email = '';
@@ -285,6 +285,7 @@ class GooglePlacesEnricher
         $facebook = '';
         $linkedin = '';
         $youtube = '';
+        $sourceTrace = '';
 
         if (!empty($webData) && is_array($webData)) {
             $phone = $webData['phone'] ?? '';
@@ -294,6 +295,9 @@ class GooglePlacesEnricher
             $facebook = $webData['facebook'] ?? '';
             $linkedin = $webData['linkedin'] ?? '';
             $youtube = $webData['youtube'] ?? '';
+            if (!empty($finalWebsiteUrl)) {
+                $sourceTrace = 'Website';
+            }
         }
 
         self::logApiCall($coreName, $textSearchCount, 1, $cacheHit, 'SUCCESS');
@@ -314,7 +318,7 @@ class GooglePlacesEnricher
             'facebook' => $facebook,
             'linkedin' => $linkedin,
             'youtube' => $youtube,
-            'source_trace' => 'Website',
+            'source_trace' => $sourceTrace,
             'website_data' => $webData ?: [],
             'google_preview' => $googlePreview,
             'api_stats' => [
@@ -419,51 +423,120 @@ class GooglePlacesEnricher
         $coreB = self::normalizeCoreName($candidateName);
 
         if (empty($coreA) || empty($coreB)) {
-            return ['level' => 'LOW', 'score' => 0.2];
+            return ['level' => 'LOW', 'score' => 0.0];
         }
 
+        // 1. Exact match
         if ($coreA === $coreB) {
             return ['level' => 'HIGH', 'score' => 1.0];
         }
 
-        $tokensA = array_filter(explode(' ', $coreA), function($t) { return mb_strlen($t) > 1; });
-        $tokensB = array_filter(explode(' ', $coreB), function($t) { return mb_strlen($t) > 1; });
-
-        if (empty($tokensA) || empty($tokensB)) {
-            return ['level' => 'LOW', 'score' => 0.2];
+        // 2. Exact match when spaces are removed (e.g., compound words "adra buro mobilya" vs "adraburomobilya")
+        $noSpaceA = str_replace(' ', '', $coreA);
+        $noSpaceB = str_replace(' ', '', $coreB);
+        if ($noSpaceA === $noSpaceB && mb_strlen($noSpaceA) >= 4) {
+            return ['level' => 'HIGH', 'score' => 0.95];
         }
 
-        $matched = 0;
-        foreach ($tokensA as $ta) {
-            foreach ($tokensB as $tb) {
-                if ($ta === $tb || (mb_strlen($ta) > 3 && mb_strlen($tb) > 3 && (strpos($ta, $tb) !== false || strpos($tb, $ta) !== false))) {
-                    $matched++;
-                    break;
+        $tokensA = array_values(array_unique(array_filter(explode(' ', $coreA), function($t) { return mb_strlen($t) > 1; })));
+        $tokensB = array_values(array_unique(array_filter(explode(' ', $coreB), function($t) { return mb_strlen($t) > 1; })));
+
+        $countA = count($tokensA);
+        $countB = count($tokensB);
+
+        if ($countA === 0 || $countB === 0) {
+            return ['level' => 'LOW', 'score' => 0.0];
+        }
+
+        // 3. Strict ONE-TO-ONE token matching
+        $matchedA = [];
+        $matchedB = [];
+        $matchWeight = 0.0;
+
+        // Pass 1: Exact token match
+        foreach ($tokensA as $idxA => $ta) {
+            foreach ($tokensB as $idxB => $tb) {
+                if (!isset($matchedA[$idxA]) && !isset($matchedB[$idxB])) {
+                    if ($ta === $tb) {
+                        $matchedA[$idxA] = true;
+                        $matchedB[$idxB] = true;
+                        $matchWeight += 1.0;
+                        break;
+                    }
                 }
             }
         }
 
-        $ratioA = $matched / count($tokensA);
-        $ratioB = $matched / count($tokensB);
-        $overlap = max($ratioA, $ratioB);
+        // Pass 2: Stem / Prefix / Substring token match for remaining unmatched tokens
+        foreach ($tokensA as $idxA => $ta) {
+            if (isset($matchedA[$idxA])) continue;
+            foreach ($tokensB as $idxB => $tb) {
+                if (isset($matchedB[$idxB])) continue;
+                $lenA = mb_strlen($ta);
+                $lenB = mb_strlen($tb);
+                if ($lenA >= 4 && $lenB >= 4) {
+                    if (str_starts_with($ta, $tb) || str_starts_with($tb, $ta)) {
+                        $weight = min($lenA, $lenB) / max($lenA, $lenB);
+                        $matchedA[$idxA] = true;
+                        $matchedB[$idxB] = true;
+                        $matchWeight += $weight;
+                        break;
+                    }
+                }
+            }
+        }
+
+        $precision = $countB > 0 ? ($matchWeight / $countB) : 0.0;
+        $recall = $countA > 0 ? ($matchWeight / $countA) : 0.0;
+        $f1 = ($precision + $recall) > 0 ? (2 * ($precision * $recall) / ($precision + $recall)) : 0.0;
+        $unionCount = $countA + $countB - $matchWeight;
+        $jaccard = $unionCount > 0 ? ($matchWeight / $unionCount) : 0.0;
 
         similar_text($coreA, $coreB, $simPercent);
         $simRatio = $simPercent / 100.0;
 
-        $score = max($overlap, $simRatio);
+        similar_text($noSpaceA, $noSpaceB, $simNoSpacePercent);
+        $simNoSpaceRatio = $simNoSpacePercent / 100.0;
+        $bestSim = max($simRatio, $simNoSpaceRatio);
+
+        // Check if candidate is an exact multi-token prefix of company name
+        $isMultiTokenPrefix = ($countB >= 2 && str_starts_with($coreA, $coreB));
+
+        if ($isMultiTokenPrefix) {
+            $score = 0.85 + (0.15 * $recall);
+        } elseif ($countB === 1 && $countA > 1) {
+            // Short candidate (only 1 word, e.g. "Kaya", "Büro", "Emlak", "Market")
+            // Prevent false HIGH! A single word candidate matching a multi-word company must be at most MEDIUM or LOW.
+            $score = min($jaccard, 0.50);
+            if ($bestSim >= 0.85 && mb_strlen($noSpaceB) >= 8) {
+                // Compound long word like "adraburomobilya"
+                $score = $bestSim * 0.95;
+            }
+        } else {
+            // Balanced score combining F1, Jaccard and string similarity
+            $score = (0.40 * $f1) + (0.30 * $jaccard) + (0.30 * $bestSim);
+        }
+
+        // Strict boundary: 0.00 <= score <= 1.00
+        $score = max(0.0, min(1.0, (float)$score));
+        $score = round($score, 2);
 
         if ($score >= 0.70) {
-            return ['level' => 'HIGH', 'score' => round($score, 2)];
+            return ['level' => 'HIGH', 'score' => $score];
         }
         if ($score >= 0.40) {
-            return ['level' => 'MEDIUM', 'score' => round($score, 2)];
+            return ['level' => 'MEDIUM', 'score' => $score];
         }
-        return ['level' => 'LOW', 'score' => round($score, 2)];
+        return ['level' => 'LOW', 'score' => $score];
     }
 
     public static function normalizeCoreName($name)
     {
-        $name = StringHelper::normalizeTurkish(mb_strtolower($name, 'UTF-8'));
+        $search = ['İ', 'I', 'Ğ', 'Ü', 'Ş', 'Ö', 'Ç', 'ğ', 'ü', 'ş', 'ö', 'ç', 'ı', 'i'];
+        $replace = ['i', 'i', 'g', 'u', 's', 'o', 'c', 'g', 'u', 's', 'o', 'c', 'i', 'i'];
+        $name = str_replace($search, $replace, $name);
+        $name = strtolower($name);
+        $name = preg_replace('/\p{M}/u', '', $name);
         $name = preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $name);
         
         $suffixes = [
@@ -471,7 +544,7 @@ class GooglePlacesEnricher
             '\\ba s\\b', '\\bas\\b', '\\bsanayi ve ticaret\\b', '\\bsan ve tic\\b', '\\bsanayi ve tic\\b',
             '\\bsanayi\\b', '\\bticaret\\b', '\\bsan\\b', '\\btic\\b', '\\bve\\b', '\\bholding\\b',
             '\\bsirketi\\b', '\\bkollektif sirketi\\b', '\\bkomandit sirketi\\b', '\\bsubesi\\b',
-            '\\bmerkezi\\b', '\\binsaat\\b', '\\byapi\\b'
+            '\\bmerkezi\\b'
         ];
         foreach ($suffixes as $s) {
             $name = preg_replace('/' . $s . '/u', ' ', $name);
