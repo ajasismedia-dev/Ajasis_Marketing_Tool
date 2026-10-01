@@ -284,12 +284,18 @@ elseif (strlen($waTargetPhone) === 11 && str_starts_with($waTargetPhone, '0')) $
                             <span style="color: var(--text-secondary); font-size: 0.85rem;">E-posta yok</span>
                         <?php endif; ?>
                     </div>
-                    <?php if(!empty($company['email'])): ?>
-                        <button type="button" class="btn btn-sm btn-ghost" onclick="quickLogComm('email')" style="font-size: 0.72rem; padding: 0.2rem 0.5rem; flex-shrink: 0;">
-                            <i data-lucide="mail" style="width: 12px; height: 12px;"></i> E-postayı Kaydet
-                        </button>
-                    <?php endif; ?>
+                    <div style="display: flex; gap: 0.4rem; align-items: center; flex-shrink: 0;">
+                        <?php if(!empty($company['email'])): ?>
+                            <a href="<?= BASE_PATH ?>/messages?company_id=<?= $company['id'] ?>&channel=email" class="btn btn-sm btn-outline" style="font-size: 0.72rem; padding: 0.2rem 0.5rem; text-decoration: none; border-color: rgba(56, 189, 248, 0.4); color: #38bdf8; display: inline-flex; align-items: center; gap: 4px;">
+                                <i data-lucide="send" style="width: 12px; height: 12px;"></i> E-posta Gönder
+                            </a>
+                            <button type="button" class="btn btn-sm btn-ghost" onclick="quickLogComm('email')" style="font-size: 0.72rem; padding: 0.2rem 0.5rem;">
+                                <i data-lucide="save" style="width: 12px; height: 12px;"></i> Kaydet
+                            </button>
+                        <?php endif; ?>
+                    </div>
                 </div>
+
 
                 <!-- Web Sitesi & Sosyal -->
                 <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.25rem;">
@@ -581,7 +587,7 @@ elseif (strlen($waTargetPhone) === 11 && str_starts_with($waTargetPhone, '0')) $
 
         <div class="form-group" style="margin-bottom: 1.25rem;">
             <label class="form-label">Mesaj Metni</label>
-            <textarea id="waMessageText" class="form-input" rows="6"><?= "Merhaba, Ajasis Media'dan iletişime geçiyorum.\n\n" . \App\Helpers\Security::escape($company['name']) . " markanızı incelerken dijital varlığınızı ve müşteri dönüşümlerinizi geliştirebileceğimiz birkaç stratejik nokta tespit ettik.\n\nUygunsanız hazırladığımız analizleri kısaca paylaşmak isteriz." ?></textarea>
+            <textarea id="waMessageText" class="form-input" rows="7"><?= !empty($defaultWaMessage) ? \App\Helpers\Security::escape($defaultWaMessage) : "Merhaba,\n\n" . \App\Helpers\Security::escape($company['name']) . " markanızı incelerken dijital varlığınızı geliştirebileceğimiz birkaç fikir dikkatimi çekti.\n\nİyi çalışmalar,\nAjasis Media" ?></textarea>
         </div>
 
         <div style="display: flex; gap: 0.75rem; justify-content: flex-end; flex-wrap: wrap;">
@@ -678,17 +684,15 @@ function openWhatsAppWeb() {
 
 function logWhatsAppCommunication() {
     const msg = document.getElementById('waMessageText').value;
+    const clientMsgId = 'wa_show_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now();
     const formData = new FormData();
     formData.append('csrf_token', '<?= \App\Helpers\Security::generateCsrfToken() ?>');
     formData.append('company_id', '<?= $company['id'] ?>');
-    formData.append('type', 'whatsapp');
-    formData.append('direction', 'outbound');
-    formData.append('outcome', 'sent');
     formData.append('subject', 'WhatsApp Tanışma / Sunum Mesajı');
     formData.append('message', msg);
-    formData.append('is_ajax', '1');
+    formData.append('client_message_id', clientMsgId);
 
-    fetch('<?= BASE_PATH ?>/history/store', {
+    fetch('<?= BASE_PATH ?>/messages/log-whatsapp', {
         method: 'POST',
         body: formData
     })
@@ -701,6 +705,7 @@ function logWhatsAppCommunication() {
             alert('Hata: ' + (res.error || 'İletişim kaydedilemedi.'));
         }
     })
+
     .catch(err => {
         alert('İletişim kaydedilirken sunucu hatası oluştu.');
     });

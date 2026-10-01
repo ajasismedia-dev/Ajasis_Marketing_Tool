@@ -32,6 +32,11 @@ if (ENVIRONMENT === 'development') {
     error_reporting(E_ALL);
 }
 
+// Composer autoloader (if available)
+if (file_exists(ROOT_DIR . '/vendor/autoload.php')) {
+    require_once ROOT_DIR . '/vendor/autoload.php';
+}
+
 // Simple Autoloader for Core, Controllers, Models, Helpers
 spl_autoload_register(function ($class) {
     // Convert Namespace to directory paths (e.g. App\Core\Database -> app/Core/Database.php)

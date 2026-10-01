@@ -127,6 +127,25 @@ class SalesCrmService
             $subject = trim($commData['subject'] ?? '');
             $message = trim($commData['message'] ?? '');
             $contactedAt = !empty($commData['contacted_at']) ? $commData['contacted_at'] : date('Y-m-d H:i:s');
+            $clientMessageId = !empty($commData['client_message_id']) ? trim($commData['client_message_id']) : null;
+
+            $commModel = new Communication();
+
+            // Idempotency guard: prevent duplicate communication inserts
+            if (!empty($clientMessageId)) {
+                $existing = $commModel->findByClientMessageId($clientMessageId);
+                if ($existing) {
+                    $db->rollBack();
+                    return [
+                        'success' => true,
+                        'idempotent' => true,
+                        'communication_id' => (int)$existing['id'],
+                        'message' => 'Bu mesaj daha önce kaydedilmiş.',
+                        'old_status' => $company['status'] ?? 'new',
+                        'new_status' => $company['status'] ?? 'new'
+                    ];
+                }
+            }
 
             $insertCommData = [
                 'company_id' => (int)$companyId,
@@ -136,11 +155,11 @@ class SalesCrmService
                 'message' => $message ?: null,
                 'outcome' => $outcome,
                 'contacted_at' => $contactedAt,
+                'client_message_id' => $clientMessageId,
                 'created_by' => $userId
             ];
 
             // 1. Insert communication
-            $commModel = new Communication();
             $commId = $commModel->create($insertCommData);
 
             // 2. Optionally insert follow-up

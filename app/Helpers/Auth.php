@@ -9,6 +9,18 @@ class Auth
         return isset($_SESSION['user_id']);
     }
 
+    public static function user()
+    {
+        if (!self::check()) {
+            return null;
+        }
+        return [
+            'id' => $_SESSION['user_id'] ?? null,
+            'name' => $_SESSION['user_name'] ?? null,
+            'username' => $_SESSION['username'] ?? null
+        ];
+    }
+
     public static function requireLogin()
     {
         if (!self::check()) {

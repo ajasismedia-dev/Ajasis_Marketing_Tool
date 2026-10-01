@@ -642,6 +642,8 @@ function enrichLead(btn, index, url) {
     });
 }
 
+const defaultWaTemplate = <?= json_encode($defaultWaBody ?? '') ?>;
+
 function openWhatsApp(phone, companyName, dbId) {
     if (!phone) {
         alert('Bu firmanın kayıtlı bir telefon numarası yok.');
@@ -653,7 +655,14 @@ function openWhatsApp(phone, companyName, dbId) {
     if (cleanPhone.length === 10) formattedPhone = '90' + cleanPhone;
     else if (cleanPhone.length === 11 && cleanPhone.startsWith('0')) formattedPhone = '9' + cleanPhone;
     
-    const msg = `Merhaba, Ajasis Media'dan Muhammet ben.\n\n${companyName} markasını incelerken sosyal medya ve dijital içerik tarafında geliştirebileceğimiz birkaç fikir dikkatimi çekti.\n\nUygunsanız markanıza özel hazırladığım 1-2 fikri ücretsiz paylaşmak isterim.`;
+    let msg = defaultWaTemplate;
+    if (msg) {
+        msg = msg.replace(/{company_name}/g, companyName || 'Yetkili');
+        msg = msg.replace(/{sender_name}/g, <?= json_encode(defined('SENDER_NAME') ? SENDER_NAME : 'Muhammet Tüzün') ?>);
+        msg = msg.replace(/{agency_name}/g, <?= json_encode(defined('BUSINESS_NAME') ? BUSINESS_NAME : 'Ajasis Media') ?>);
+    } else {
+        msg = `Merhaba, Ajasis Media'dan Muhammet ben.\n\n${companyName} markasını incelerken sosyal medya ve dijital içerik tarafında geliştirebileceğimiz birkaç fikir dikkatimi çekti.\n\nUygunsanız markanıza özel hazırladığım 1-2 fikri ücretsiz paylaşmak isterim.`;
+    }
     
     document.getElementById('waPhone').value = formattedPhone;
     document.getElementById('waMessage').value = msg;
@@ -684,17 +693,15 @@ function sendWhatsApp() {
 
 function logLeadWhatsApp(dbId) {
     const msg = document.getElementById('waMessage').value;
+    const clientMsgId = 'wa_lead_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now();
     const formData = new FormData();
     formData.append('csrf_token', '<?= \App\Helpers\Security::generateCsrfToken() ?>');
     formData.append('company_id', dbId);
-    formData.append('type', 'whatsapp');
-    formData.append('direction', 'outbound');
-    formData.append('outcome', 'sent');
     formData.append('subject', 'WhatsApp Tanışma Mesajı');
     formData.append('message', msg);
-    formData.append('is_ajax', '1');
+    formData.append('client_message_id', clientMsgId);
 
-    fetch('<?= BASE_PATH ?>/history/store', {
+    fetch('<?= BASE_PATH ?>/messages/log-whatsapp', {
         method: 'POST',
         body: formData
     })

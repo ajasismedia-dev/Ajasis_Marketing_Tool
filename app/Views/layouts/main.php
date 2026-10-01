@@ -39,6 +39,12 @@
                 </a>
             </li>
             <li>
+                <a href="<?= BASE_PATH ?>/messages" class="nav-link <?= strpos($_SERVER['REQUEST_URI'] ?? '', '/messages') !== false ? 'active' : '' ?>" title="Mesaj Merkezi">
+                    <i data-lucide="messages-square"></i>
+                    <span>Mesaj Merkezi</span>
+                </a>
+            </li>
+            <li>
                 <a href="<?= BASE_PATH ?>/history" class="nav-link <?= strpos($_SERVER['REQUEST_URI'] ?? '', '/history') !== false ? 'active' : '' ?>" title="İletişim Geçmişi">
                     <i data-lucide="history"></i>
                     <span>İletişim Geçmişi</span>

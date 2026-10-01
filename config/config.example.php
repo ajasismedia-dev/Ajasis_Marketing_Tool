@@ -24,3 +24,18 @@ define('APP_TIMEZONE', 'Europe/Istanbul');
 define('DB_TIMEZONE', '+03:00');
 date_default_timezone_set(APP_TIMEZONE);
 
+// Business Profile
+define('BUSINESS_NAME', 'Ajasis Media');
+
+// SMTP Configuration (Single-email sending via PHPMailer)
+define('SMTP_ENABLED', false);
+define('SMTP_HOST', '');
+define('SMTP_PORT', 587);
+define('SMTP_USERNAME', '');
+define('SMTP_PASSWORD', '');
+define('SMTP_ENCRYPTION', 'tls'); // 'tls', 'ssl', or ''
+define('SMTP_FROM_EMAIL', '');
+define('SMTP_FROM_NAME', 'Ajasis Media');
+define('SMTP_REPLY_TO', '');
+
+

@@ -46,10 +46,15 @@ class LeadsController extends Controller
             $statuses = $result['statuses'];
         }
 
+        $tmplModel = new \App\Models\MessageTemplate();
+        $defaultWaTmpl = $tmplModel->findDefaultByChannel('whatsapp');
+        $defaultWaBody = $defaultWaTmpl ? $defaultWaTmpl['body'] : '';
+
         $this->view('leads/index', [
             'page_title' => 'Firma Bul',
             'leads' => $leads,
             'statuses' => $statuses,
+            'defaultWaBody' => $defaultWaBody,
             'filters' => [
                 'q' => $query,
                 'city' => $city,

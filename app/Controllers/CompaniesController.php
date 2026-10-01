@@ -136,13 +136,24 @@ class CompaniesController extends Controller
         $fuModel = new \App\Models\FollowUp();
         $followUps = $fuModel->getByCompany($id);
 
+        // Render default WhatsApp template
+        $templateModel = new \App\Models\MessageTemplate();
+        $templateModel->seedDefaults();
+        $defaultWaTpl = $templateModel->getDefaultByChannel('whatsapp');
+        $defaultWaMessage = '';
+        if ($defaultWaTpl) {
+            $defaultWaMessage = \App\Services\Messaging\TemplateRenderer::render($defaultWaTpl['body'], $company);
+        }
+
         $this->view('companies/show', [
-            'page_title' => $company['name'] . ' - Satış Operasyon Detayı',
-            'company' => $company,
-            'communications' => $communications,
-            'followUps' => $followUps
+            'page_title'       => $company['name'] . ' - Satış Operasyon Detayı',
+            'company'          => $company,
+            'communications'   => $communications,
+            'followUps'        => $followUps,
+            'defaultWaMessage' => $defaultWaMessage
         ], 'main');
     }
+
 
     public function updateStatus($id)
     {

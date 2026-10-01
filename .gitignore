@@ -27,6 +27,7 @@ Thumbs.db
 # IDEs
 .vscode/
 .idea/
-*.swp
-
 dev-router.php
+
+# Composer
+vendor/

@@ -40,17 +40,8 @@ $locRes = $loc->search('plastik', 'Konya', '', 10);
 TestHelper::assertEqual(0, count($locRes), 'ListOfCompany should return empty (UNAVAILABLE)');
 
 $kso = new KsoSource();
-try {
-    $ksoRes = $kso->search('plastik', 'Konya', '', 3);
-    if (!empty($ksoRes)) {
-        TestHelper::assertTrue(count($ksoRes) > 0, 'KSO search returned items');
-        TestHelper::assertNotEmpty($ksoRes[0]['name'], 'KSO first item has a name');
-    } else {
-        TestHelper::skip('KSO returned 0 results (Network timeout, cloudflare block, or actually 0)');
-    }
-} catch (\Exception $e) {
-    TestHelper::skip('KSO search network error: ' . $e->getMessage());
-}
+TestHelper::assertTrue($kso instanceof \App\Services\LeadFinder\LeadSourceInterface, 'KsoSource implements LeadSourceInterface');
+// Live KSO & KTO network queries are moved to tests/integration/lead_sources_live.php
 
 // Skip some network heavy tests but allow basic execution
 TestHelper::skip('OSM mapping (tested manually)');
@@ -245,6 +236,7 @@ if (file_exists(__DIR__ . '/../config/config.php')) {
 
 require __DIR__ . '/test_string_parsing.php';
 require __DIR__ . '/test_sales_crm.php';
+require __DIR__ . '/test_messages.php';
 
 TestHelper::finish();
 

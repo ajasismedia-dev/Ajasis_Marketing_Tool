@@ -139,6 +139,20 @@ class Communication
         return $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
+    public function findByClientMessageId($clientMessageId)
+    {
+        if (empty($clientMessageId)) return null;
+        $sql = "SELECT c.*, comp.name AS company_name
+                FROM communications c
+                INNER JOIN companies comp ON c.company_id = comp.id
+                WHERE c.client_message_id = :id LIMIT 1";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute(['id' => $clientMessageId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+
     public function create($data)
     {
         $fields = array_keys($data);
