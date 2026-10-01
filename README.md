@@ -64,3 +64,18 @@ Lead zenginleştirme (telefon, web sitesi, adres, koordinat vb.) için Google Cl
    define('GOOGLE_PLACES_ENABLED', true);
    ```
 4. **Önemli Güvenlik Notu**: API anahtarı asla frontend JavaScript'e gönderilmez, HTML sayfalarına basılmaz, loglara yazılmaz ve git commit'lerine dahil edilmez. Sistemde API anahtarı yoksa uygulama çökmez; otomatik zenginleştirme "Yapılandırılmadı" olarak işaretlenir.
+
+## Test Paketleri
+
+- **Normal Birim Testleri (Varsayılan):**
+  ```bash
+  php tests/run_all.php
+  ```
+  → Network-free ve çevrimdışı çalışır; ücretli harici API veya Google Places kotası tüketmez.
+
+- **Canlı Google Places Entegrasyon Testi:**
+  ```bash
+  php tests/integration/google_places_live.php
+  ```
+  → Gerçek Google Places API çağrısı yapar ve quota/billing tüketir. Sadece manuel doğrulama gerektiğinde çalıştırılmalıdır.
+

@@ -177,10 +177,10 @@ TestHelper::assertTrue(strpos($enricherCode, "'X-Goog-FieldMask: id,websiteUri'"
 TestHelper::assertTrue(strpos($enricherCode, 'nationalPhoneNumber') === false, 'Place Details does NOT request nationalPhoneNumber');
 TestHelper::assertTrue(strpos($enricherCode, 'internationalPhoneNumber') === false, 'Place Details does NOT request internationalPhoneNumber');
 
-// 4. Response array does NOT contain google_preview
+// 4. Response array does NOT contain google_preview (Static and zero-cost verification)
 TestHelper::assertTrue(strpos($enricherCode, "'google_preview'") === false, 'GooglePlacesEnricher does NOT produce google_preview');
-$enrichResult = GooglePlacesEnricher::enrich('DUMMY_QUERY_FOR_TEST');
-TestHelper::assertTrue(!isset($enrichResult['google_preview']), 'Enrich result array does NOT contain google_preview');
+TestHelper::assertTrue(strpos($enricherCode, '"google_preview"') === false, 'GooglePlacesEnricher does NOT reference google_preview string');
+TestHelper::assertTrue(!isset($enrichEmpty['google_preview']), 'Enrich return array does NOT contain google_preview');
 
 // 5. DB save last_enriched_at metadata assignment
 $controllerCode = file_get_contents(__DIR__ . '/../app/Controllers/LeadsController.php');
