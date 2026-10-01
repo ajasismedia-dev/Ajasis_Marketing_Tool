@@ -130,7 +130,37 @@ class CompaniesController extends Controller
         $company = $this->companyModel->findById($id);
         if (!$company) return $this->error404();
 
-        $this->view('companies/show', ['page_title' => 'Firma Detayı', 'company' => $company], 'main');
+        $commModel = new \App\Models\Communication();
+        $communications = $commModel->getByCompany($id);
+
+        $fuModel = new \App\Models\FollowUp();
+        $followUps = $fuModel->getByCompany($id);
+
+        $this->view('companies/show', [
+            'page_title' => $company['name'] . ' - Satış Operasyon Detayı',
+            'company' => $company,
+            'communications' => $communications,
+            'followUps' => $followUps
+        ], 'main');
+    }
+
+    public function updateStatus($id)
+    {
+        if (!is_numeric($id) || $_SERVER['REQUEST_METHOD'] !== 'POST') return $this->error404();
+        Security::checkCsrfToken($_POST['csrf_token'] ?? '');
+
+        $newStatus = trim($_POST['status'] ?? '');
+        $userId = Auth::user()['id'] ?? null;
+
+        $res = \App\Services\CRM\SalesCrmService::updateCompanyStatus((int)$id, $newStatus, $userId);
+
+        if (!empty($_POST['is_ajax'])) {
+            header('Content-Type: application/json');
+            echo json_encode($res);
+            exit;
+        }
+
+        $this->redirect('/companies/show/' . $id . '?msg=status_updated');
     }
 
     public function delete($id)
@@ -147,19 +177,9 @@ class CompaniesController extends Controller
         if (!is_numeric($id) || $_SERVER['REQUEST_METHOD'] !== 'POST') return $this->error404();
         Security::checkCsrfToken($_POST['csrf_token'] ?? '');
 
-        $company = $this->companyModel->findById($id);
-        if (!$company) return $this->error404();
+        $userId = Auth::user()['id'] ?? null;
+        \App\Services\CRM\SalesCrmService::updateCompanyStatus((int)$id, 'contacted', $userId);
 
-        $updateData = [
-            'status' => 'contacted',
-            'last_contact_at' => date('Y-m-d H:i:s')
-        ];
-
-        if (empty($company['first_contact_at'])) {
-            $updateData['first_contact_at'] = date('Y-m-d H:i:s');
-        }
-
-        $this->companyModel->update($id, $updateData);
         $this->redirect('/companies/show/' . $id);
     }
 

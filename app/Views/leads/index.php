@@ -206,19 +206,18 @@ $statusLabels = [
             <textarea id="waMessage" class="form-input" rows="6"></textarea>
         </div>
         
-        <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
+        <div style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem; flex-wrap: wrap;">
             <button type="button" id="waModalClose" class="btn" style="background: rgba(255,255,255,0.1); color: #fff;">İptal</button>
-            <button type="button" id="waModalSend" class="btn btn-primary">WhatsApp'ta Aç</button>
+            <button type="button" id="waModalSend" class="btn" style="background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4);">
+                <i data-lucide="external-link" style="width: 14px; height: 14px;"></i> WhatsApp'ı Aç
+            </button>
+            <button type="button" id="waModalSaveComm" class="btn btn-primary" style="display: none;">
+                <i data-lucide="save" style="width: 14px; height: 14px;"></i> İletişimi Kaydet
+            </button>
         </div>
         
-        <div id="waMarkContactedBox" style="display: none; margin-top: 1rem; border-top: 1px solid var(--card-border); padding-top: 1rem;">
-            <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">İletişim kurduktan sonra firmayı güncelleyin:</p>
-            <form id="waMarkContactedForm" method="POST" action="">
-                <input type="hidden" name="csrf_token" value="<?= \App\Helpers\Security::generateCsrfToken() ?>">
-                <button type="submit" class="btn btn-primary" style="width: 100%;">
-                    <i data-lucide="check-circle"></i> İletişime Geçildi Olarak İşaretle
-                </button>
-            </form>
+        <div id="waNotSavedNotice" style="display: none; margin-top: 0.75rem; font-size: 0.75rem; color: #94a3b8; text-align: right;">
+            * Firma henüz CRM'e kaydedilmedi. İletişimi zaman çizelgesine işlemek için önce firmayı kaydedin.
         </div>
     </div>
 </div>
@@ -660,20 +659,57 @@ function openWhatsApp(phone, companyName, dbId) {
     document.getElementById('waMessage').value = msg;
     document.getElementById('waModal').style.display = 'flex';
     
+    const saveBtn = document.getElementById('waModalSaveComm');
+    const notice = document.getElementById('waNotSavedNotice');
+    
     if (dbId) {
-        document.getElementById('waMarkContactedBox').style.display = 'block';
-        document.getElementById('waMarkContactedForm').action = '<?= BASE_PATH ?>/companies/markContacted/' + dbId;
+        saveBtn.style.display = 'inline-flex';
+        notice.style.display = 'none';
+        saveBtn.onclick = function() {
+            logLeadWhatsApp(dbId);
+        };
     } else {
-        document.getElementById('waMarkContactedBox').style.display = 'none';
+        saveBtn.style.display = 'none';
+        notice.style.display = 'block';
     }
+    if (window.lucide) lucide.createIcons();
 }
 
 function sendWhatsApp() {
     const phone = document.getElementById('waPhone').value;
     const msg = document.getElementById('waMessage').value;
     const url = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
-    window.open(url, '_blank');
-    document.getElementById('waModal').style.display = 'none';
+    window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+function logLeadWhatsApp(dbId) {
+    const msg = document.getElementById('waMessage').value;
+    const formData = new FormData();
+    formData.append('csrf_token', '<?= \App\Helpers\Security::generateCsrfToken() ?>');
+    formData.append('company_id', dbId);
+    formData.append('type', 'whatsapp');
+    formData.append('direction', 'outbound');
+    formData.append('outcome', 'sent');
+    formData.append('subject', 'WhatsApp Tanışma Mesajı');
+    formData.append('message', msg);
+    formData.append('is_ajax', '1');
+
+    fetch('<?= BASE_PATH ?>/history/store', {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) {
+            alert('WhatsApp iletişimi başarıyla zaman çizelgesine kaydedildi.');
+            document.getElementById('waModal').style.display = 'none';
+        } else {
+            alert('Hata: ' + (res.error || 'İletişim kaydedilemedi.'));
+        }
+    })
+    .catch(err => {
+        alert('İletişim kaydedilirken sunucu hatası oluştu.');
+    });
 }
 </script>
 

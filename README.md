@@ -1,43 +1,14 @@
 # Ajasis Marketing Tool
 
-Ajasis Media için özel olarak geliştirilen pazarlama ve lead yönetim uygulaması. Bu proje şu anda **Faz 1 (Temel Altyapı)** aşamasındadır.
+Ajasis Media için özel olarak geliştirilen pazarlama, potansiyel müşteri keşfi ve satış CRM yönetim uygulaması. Bu proje şu anda **Faz 4 (Sales CRM / İletişim Geçmişi & Follow-Up)** aşamasındadır.
 
-## Projenin Amacı
-İlerleyen aşamalarda Konya'daki firmaları bulacak, firma bilgilerini yönetecek, sosyal medya ve web sitesi takibi yapacak, WhatsApp entegrasyonu sunacak ve iletişim geçmişini saklayacaktır. 
-Şu anki (Faz 1) sürümü ile uygulamanın güvenli mimarisi, veritabanı bağlantısı, session-based auth sistemi, tasarım standartları ve dizin yapısı oluşturulmuştur.
+## Projenin Kapsamı ve Modülleri
 
-## Gereksinimler
-- PHP 8.4
-- MariaDB 10.5
-- LiteSpeed (veya Apache, mod_rewrite aktif)
-- PHP cURL ve allow_url_fopen (İleriki fazlar için)
-- PDO eklentisi
+- **Faz 1 — Altyapı & Güvenlik:** Güvenli MVC mimarisi, session-based kimlik doğrulama, CSRF/XSS korumaları, dark/lime glassmorphism arayüz teması ve kurulum sihirbazı.
+- **Faz 2 — Firma & Lead Yönetimi:** Veritabanı destekli firma dizini, arama, filtreleme, sayfalama, mükerrer kayıt engelleme ve detay yönetimi.
+- **Faz 3 — Lead Discovery & Enrichment:** Çok kaynaklı firma keşif motoru (Konya Ticaret Odası, Konya Sanayi Odası, OpenStreetMap), Google Places API (New) otomatik eşleştirme ve güven skoru hesaplama, web sitesi crawler pipeline (e-posta, telefon, sosyal medya tespiti).
+- **Faz 4 — Sales CRM & Follow-Up:** Firma bazlı iletişim zaman çizelgesi (WhatsApp, telefon, e-posta, toplantı, iç not), durum senkronizasyonu, follow-up hatırlatıcıları (gecikmiş, bugünkü, yaklaşan), global iletişim geçmişi ve satış hunisi (pipeline).
 
-## Lokal Kurulum Adımları
-
-1. Bu projeyi lokal sunucunuzun (XAMPP, MAMP, Valet vb.) ilgili dizinine kopyalayın.
-2. MariaDB üzerinde `ajasis_marketing` adında boş bir veritabanı oluşturun (Karakter seti `utf8mb4_unicode_ci` olmalı).
-3. Veritabanı tablolarını içeri aktarmak için terminalde veya phpMyAdmin üzerinden şu işlemi yapın:
-   ```bash
-   mysql -u root -p ajasis_marketing < database/schema.sql
-   ```
-4. `config/config.php` dosyasını açıp veritabanı bilgilerinizi ve `BASE_PATH` değişkenini lokal ortamınıza göre düzenleyin. 
-   - Proje ana dizindeyse: `define('BASE_PATH', '');`
-   - Proje bir alt klasördeyse (örneğin `/marketingtool`): `define('BASE_PATH', '/marketingtool');`
-5. Kurulum tamamlandı. Uygulamaya tarayıcıdan erişebilirsiniz (Örn: `http://localhost/marketingtool/login`).
-
-## İlk Kullanıcı Girişi
-`schema.sql` içeri aktarıldığında hiçbir kullanıcı oluşturulmaz. İlk kullanıcıyı oluşturmak için:
-- Tarayıcıdan uygulamanın `/setup` rotasına gidin (Örn: `http://localhost/marketingtool/setup`).
-- Karşınıza çıkan ekrandan ilk yönetici hesabını oluşturun.
-- Bu ekran yalnızca veritabanında hiç kullanıcı yoksa aktiftir. Kullanıcı oluşturulduktan sonra güvenlik sebebiyle `/setup` rotasına erişilemez.
-
-## Faz 2 - Firma & Lead Yönetimi
-- Gerçek veritabanı bağlantılı Dashboard
-- `companies` tablosu eklendi
-- Firma listeleme (Arama, Filtreleme, Sayfalama)
-- Firma Ekleme / Düzenleme (Mükerrer kayıt kontrolü)
-- Firma Detay ekranı ve durum (status) yönetimi
 
 ## Production Deployment Yöntemi
 

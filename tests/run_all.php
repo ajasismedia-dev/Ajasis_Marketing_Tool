@@ -244,3 +244,7 @@ if (file_exists(__DIR__ . '/../config/config.php')) {
 }
 
 require __DIR__ . '/test_string_parsing.php';
+require __DIR__ . '/test_sales_crm.php';
+
+TestHelper::finish();
+

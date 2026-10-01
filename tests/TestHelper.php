@@ -17,6 +17,17 @@ class TestHelper
         }
     }
 
+    public static function assertFalse($condition, $name)
+    {
+        if (!$condition) {
+            self::$passed++;
+            echo "[PASS] $name\n";
+        } else {
+            self::$failed++;
+            echo "[FAIL] $name\n";
+        }
+    }
+
     public static function assertEqual($expected, $actual, $name)
     {
         if ($expected === $actual) {

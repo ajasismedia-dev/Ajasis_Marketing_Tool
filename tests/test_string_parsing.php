@@ -74,4 +74,3 @@ function isWaMobile($phone) {
 TestHelper::assertTrue(!isWaMobile('0332 123 45 67'), 'Fixed-line is NOT mobile');
 TestHelper::assertTrue(isWaMobile('0532 123 45 67'), '053x is mobile');
 
-TestHelper::finish();
